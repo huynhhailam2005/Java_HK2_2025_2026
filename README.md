@@ -1,7 +1,6 @@
 # SRPM Project - Hệ thống Quản lý Dự án Sinh viên
 
 ---
-
 ## 1. Yêu cầu hệ thống
 Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đặt các công cụ sau:
 
