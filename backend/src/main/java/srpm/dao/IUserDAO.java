@@ -1,15 +1,16 @@
 package srpm.dao;
 
 import srpm.model.User;
-import java.sql.SQLException;
 
 public interface IUserDAO {
-    void save(User user) throws SQLException, ClassNotFoundException;
-    void update(User user) throws SQLException, ClassNotFoundException;
-    User findById(Long id) throws SQLException, ClassNotFoundException;
-    User findByUsername(String username) throws SQLException, ClassNotFoundException;
-    User findByUsernameOrEmail(String identifier) throws SQLException, ClassNotFoundException;
-    void deleteById(Long id) throws SQLException, ClassNotFoundException;
-    boolean existsByUsername(String username) throws SQLException, ClassNotFoundException;
-    boolean existsByEmail(String email) throws SQLException, ClassNotFoundException;
+    User findById(String id);
+    void deleteById(String id);
+
+    User findByUsernameOrEmail(String identifier);
+
+    boolean existsByUsername(String username);
+    boolean existsByEmail(String email);
+
+    void save(User user);
+    void update(User user);
 }

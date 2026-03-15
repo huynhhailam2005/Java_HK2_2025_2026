@@ -1,115 +1,69 @@
 package srpm.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.HashMap;
-import java.util.Map;
+import srpm.dto.request.LoginRequest;
+import srpm.dto.request.RegisterRequest;
+import srpm.dto.response.LoginResponse;
+import srpm.model.UserFactory;
+import srpm.service.UserService;
+import srpm.model.User;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "http://localhost:5173")
 public class AuthRestController {
 
+    private final UserService userService;
+
+    @Autowired
+    public AuthRestController(UserService userService) {
+        this.userService = userService;
+    }
+
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest loginRequest) {
+        Optional<User> userOpt = userService.login(loginRequest.getUsername(), loginRequest.getPassword());
 
-        Map<String, Object> response = new HashMap<>();
-
-        // Check dữ liệu rỗng
-        if (loginRequest.getUsername() == null || loginRequest.getUsername().trim().isEmpty()
-                || loginRequest.getPassword() == null || loginRequest.getPassword().trim().isEmpty()) {
-
-            response.put("status", "error");
-            response.put("message", "Username hoặc password không được để trống");
-
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        if ("admin".equals(loginRequest.getUsername()) && "123456".equals(loginRequest.getPassword())) {
-            response.put("status", "success");
-            response.put("message", "Đăng nhập thành công!");
-            response.put("token", "fake-jwt-token-123456");
-
-            return ResponseEntity.ok(response);
+        if (userOpt.isPresent()) {
+            return ResponseEntity.ok(new LoginResponse(true, "Đăng nhập thành công", userOpt.get()));
         } else {
-            response.put("status", "error");
-            response.put("message", "Sai tên đăng nhập hoặc mật khẩu.");
-
-            return ResponseEntity.status(401).body(response);
+            return ResponseEntity.status(401).body(new LoginResponse(false, "Sai tài khoản hoặc mật khẩu", null));
         }
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<LoginResponse> register(@RequestBody RegisterRequest regRequest) {
+        try {
+            if (regRequest.getUsername() == null || regRequest.getUsername().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(new LoginResponse(false, "Username không được để trống", null));
+            }
+            if (regRequest.getEmail() == null || regRequest.getEmail().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(new LoginResponse(false, "Email không được để trống", null));
+            }
+            if ("ADMIN".equalsIgnoreCase(regRequest.getRole())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new LoginResponse(false, "Không được phép đăng ký tài khoản Admin", null));
+            }
+            User user = UserFactory.createUser(regRequest.getRole());
 
-        Map<String, Object> response = new HashMap<>();
+            user.setUsername(regRequest.getUsername());
+            user.setPassword(regRequest.getPassword());
+            user.setEmail(regRequest.getEmail());
 
-        // Check dữ liệu rỗng
-        if (registerRequest.getUsername() == null || registerRequest.getUsername().trim().isEmpty()
-                || registerRequest.getPassword() == null || registerRequest.getPassword().trim().isEmpty()
-                || registerRequest.getEmail() == null || registerRequest.getEmail().trim().isEmpty()) {
+            userService.createUser(user);
 
-            response.put("status", "error");
-            response.put("message", "Username, password và email không được để trống");
+            return ResponseEntity.ok(new LoginResponse(true, "Đăng ký tài khoản thành công!", null));
 
-            return ResponseEntity.badRequest().body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new LoginResponse(false, e.getMessage(), null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new LoginResponse(false, "Lỗi hệ thống: " + e.getMessage(), null));
         }
-
-        response.put("status", "success");
-        response.put("message", "Đăng ký thành công tài khoản: " + registerRequest.getUsername());
-
-        return ResponseEntity.ok(response);
-    }
-}
-
-class LoginRequest {
-    private String username;
-    private String password;
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-}
-
-class RegisterRequest {
-    private String username;
-    private String password;
-    private String email;
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
     }
 }

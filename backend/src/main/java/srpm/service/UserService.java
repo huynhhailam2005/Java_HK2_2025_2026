@@ -1,11 +1,13 @@
 package srpm.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import srpm.dao.IUserDAO;
 import srpm.model.User;
-import java.sql.SQLException;
+
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -25,7 +27,7 @@ public class UserService {
                 return Optional.of(user);
             }
             return Optional.empty();
-        } catch (SQLException | ClassNotFoundException ex) {
+        } catch (DataAccessException ex) {
             throw new IllegalStateException("Lỗi DB khi đăng nhập", ex);
         }
     }
@@ -34,9 +36,14 @@ public class UserService {
         try {
             if (userDAO.existsByUsername(user.getUsername())) throw new IllegalArgumentException("Username đã tồn tại");
             if (userDAO.existsByEmail(user.getEmail())) throw new IllegalArgumentException("Email đã tồn tại");
+            if (user.getID() == null || user.getID().isBlank()) {
+                user.setID(UUID.randomUUID().toString());
+            }
             userDAO.save(user);
             return user;
-        } catch (SQLException | ClassNotFoundException ex) {
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (DataAccessException ex) {
             throw new IllegalStateException("Lỗi DB khi tạo người dùng", ex);
         }
     }
@@ -45,23 +52,23 @@ public class UserService {
         try {
             userDAO.update(user);
             return user;
-        } catch (SQLException | ClassNotFoundException ex) {
+        } catch (DataAccessException ex) {
             throw new IllegalStateException("Lỗi DB khi cập nhật", ex);
         }
     }
 
-    public Optional<User> getUserById(Long id) {
+    public Optional<User> getUserById(String id) {
         try {
             return Optional.ofNullable(userDAO.findById(id));
-        } catch (SQLException | ClassNotFoundException ex) {
+        } catch (DataAccessException ex) {
             throw new IllegalStateException("Lỗi DB khi tìm ID", ex);
         }
     }
 
-    public void deleteUser(Long id) {
+    public void deleteUser(String id) {
         try {
             userDAO.deleteById(id);
-        } catch (SQLException | ClassNotFoundException ex) {
+        } catch (DataAccessException ex) {
             throw new IllegalStateException("Lỗi DB khi xóa", ex);
         }
     }
