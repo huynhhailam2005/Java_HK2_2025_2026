@@ -1,20 +1,41 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { getApiErrorMessage, login } from '../services/authApi';
 
 
 const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email === '' || password === '') {
+        if (email.trim() === '' || password === '') {
             setError('Vui lòng nhập đầy đủ thông tin đăng nhập.');
-        } else {
-            setError('');
-            alert('Đăng nhập thành công! (Chờ nối API)');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const response = await login({
+                username: email.trim(),
+                password,
+            });
+
+            if (!response.success) {
+                setError(response.message || 'Dang nhap that bai');
+                return;
+            }
+
+            alert(response.message || 'Dang nhap thanh cong');
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Khong the ket noi den Backend.'));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -118,9 +139,10 @@ const LoginPage = () => {
 
                             <button
                                 type="submit"
+                                disabled={isSubmitting}
                                 className="w-full mt-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-4 rounded-2xl font-bold shadow-[0_10px_20px_-10px_rgba(37,99,235,0.6)] hover:shadow-[0_15px_25px_-10px_rgba(37,99,235,0.7)] hover:-translate-y-0.5 active:translate-y-0.5 flex items-center justify-center gap-2 transition-all duration-300"
                             >
-                                Đăng nhập hệ thống
+                                {isSubmitting ? 'Dang xu ly...' : 'Đăng nhập hệ thống'}
                             </button>
 
                             <div className="text-center pt-2">

@@ -1,24 +1,53 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { getApiErrorMessage, register } from '../services/authApi';
 
 
 const RegisterPage = () => {
-    const [fullName, setFullName] = useState('');
+    const navigate = useNavigate();
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [role, setRole] = useState('STUDENT');
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleRegister = (e: React.FormEvent) => {
+    const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (fullName === '' || email === '' || password === '' || confirmPassword === '') {
+        if (username.trim() === '' || email.trim() === '' || password === '' || confirmPassword === '') {
             setError('Vui lòng điền đầy đủ thông tin để đăng ký.');
-        } else if (password !== confirmPassword) {
+            return;
+        }
+
+        if (password !== confirmPassword) {
             setError('Mật khẩu và Nhập lại mật khẩu không khớp.');
-        } else {
-            setError('');
-            alert('Tạo tài khoản thành công! (Chờ nối API Spring Boot)');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const response = await register({
+                username: username.trim(),
+                email: email.trim(),
+                password,
+                role,
+            });
+
+            if (!response.success) {
+                setError(response.message || 'Dang ky that bai');
+                return;
+            }
+
+            alert(response.message || 'Dang ky thanh cong');
+            navigate('/');
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Khong the ket noi den Backend.'));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -71,21 +100,34 @@ const RegisterPage = () => {
                                 </div>
                             )}
 
-                            {/* Input Họ và Tên */}
+                            {/* Input Username */}
                             <div className="space-y-1.5">
-                                <label className="text-sm font-semibold text-slate-300 ml-1">Họ và Tên</label>
+                                <label className="text-sm font-semibold text-slate-300 ml-1">Tên đăng nhập</label>
                                 <div className="relative group">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-blue-400 transition-colors">
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                                     </div>
                                     <input
                                         type="text"
-                                        value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
                                         className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3.5 pl-11 text-white placeholder-slate-500 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400 transition-all backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
-                                        placeholder="Dao Minh Tam"
+                                        placeholder="minhtam123"
                                     />
                                 </div>
+                            </div>
+
+                            {/* Input Role */}
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-semibold text-slate-300 ml-1">Vai trò</label>
+                                <select
+                                    value={role}
+                                    onChange={(e) => setRole(e.target.value)}
+                                    className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3.5 text-white focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400 transition-all backdrop-blur-md shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
+                                >
+                                    <option value="STUDENT" className="text-black">Sinh viên</option>
+                                    <option value="LECTURER" className="text-black">Giảng viên</option>
+                                </select>
                             </div>
 
                             {/* Input Email */}
@@ -153,9 +195,10 @@ const RegisterPage = () => {
                             {/* Nút Submit */}
                             <button
                                 type="submit"
+                                disabled={isSubmitting}
                                 className="w-full mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-4 rounded-2xl font-bold shadow-[0_10px_20px_-10px_rgba(37,99,235,0.6)] hover:shadow-[0_15px_25px_-10px_rgba(37,99,235,0.7)] hover:-translate-y-0.5 active:translate-y-0.5 flex items-center justify-center transition-all duration-300"
                             >
-                                Tạo tài khoản
+                                {isSubmitting ? 'Dang xu ly...' : 'Tạo tài khoản'}
                             </button>
 
                             <div className="text-center pt-3">
