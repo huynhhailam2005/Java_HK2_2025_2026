@@ -8,3 +8,16 @@ CREATE TABLE users (
     role        VARCHAR(20)  NOT NULL,
     student_id  VARCHAR(20)  UNIQUE
 );
+
+DROP TABLE IF EXISTS topics CASCADE;
+
+CREATE TABLE topics (
+    id          VARCHAR(36)  PRIMARY KEY,
+    title       VARCHAR(255) NOT NULL,
+    description TEXT,
+    status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    lecturer_id VARCHAR(36),
+    student_id  VARCHAR(36),
+    created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+);
