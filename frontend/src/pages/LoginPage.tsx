@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getApiErrorMessage, login } from '../services/authApi';
-
 
 const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const navigate = useNavigate();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,7 +31,21 @@ const LoginPage = () => {
                 return;
             }
 
+            // Lưu dữ liệu user
+            localStorage.setItem('user', JSON.stringify(response.data));
+
             alert(response.message || 'Dang nhap thanh cong');
+            // Định nghĩa khuôn mẫu dữ liệu
+            const userData = response.data as { role: string; username: string };
+            const userRole = userData.role;
+            if (userRole === 'LECTURER') {
+                navigate('/dashboard/lecturer');
+            } else if (userRole === 'ADMIN') {
+                navigate('/dashboard/admin');
+            } else {
+                navigate('/dashboard/student'); // Sinh viên thì vào đây
+            }
+
         } catch (err) {
             setError(getApiErrorMessage(err, 'Khong the ket noi den Backend.'));
         } finally {
@@ -46,10 +60,12 @@ const LoginPage = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="min-h-screen flex items-center justify-center w-full py-10"
+            // 🛠️ ĐÃ FIX: Chèn class bg- image và bg-[#050B20] vào dòng dưới này nè
+            className="min-h-screen flex items-center justify-center w-full py-10 bg-[#050B20] bg-[url('/login-bg.png')] bg-cover bg-center bg-no-repeat relative"
         >
 
-
+            {/* Phủ một lớp màu đen mờ (overlay) lên hình nền để chữ dễ đọc hơn (Tùy chọn) */}
+            <div className="absolute inset-0 bg-slate-900/40 z-0"></div>
 
             {/* TEXT TRANG TRÍ BÊN TRÁI */}
             <div className="absolute left-16 bottom-16 w-96 text-white hidden xl:block z-10">
