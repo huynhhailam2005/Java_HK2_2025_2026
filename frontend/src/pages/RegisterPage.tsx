@@ -58,7 +58,8 @@ const RegisterPage = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="min-h-screen flex items-center justify-center w-full py-10"
+            // 🛠️ ĐÃ FIX: Chèn class bg- image và bg-[#050B20] vào dòng dưới này nè
+            className="min-h-screen flex items-center justify-center w-full py-10 bg-[#050B20] bg-[url('/login-bg.png')] bg-cover bg-center bg-no-repeat relative"
         >
 
 
