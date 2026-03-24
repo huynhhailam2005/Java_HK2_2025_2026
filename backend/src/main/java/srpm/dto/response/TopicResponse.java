@@ -1,13 +1,15 @@
 package srpm.dto.response;
 
-public class LoginResponse {
+import srpm.model.Topic;
+
+public class TopicResponse {
     private boolean success;
     private String message;
-    private Object data;
+    private Topic data;
 
-    public LoginResponse() {}
+    public TopicResponse() {}
 
-    public LoginResponse(boolean success, String message, Object data) {
+    public TopicResponse(boolean success, String message, Topic data) {
         this.success = success;
         this.message = message;
         this.data = data;
@@ -15,10 +17,9 @@ public class LoginResponse {
 
     public boolean isSuccess() { return success; }
     public String getMessage() { return message; }
-    public Object getData() { return data; }
+    public Topic getData() { return data; }
 
     public void setSuccess(boolean success) { this.success = success; }
     public void setMessage(String message) { this.message = message; }
-    public void setData(Object data) { this.data = data; }
+    public void setData(Topic data) { this.data = data; }
 }
-

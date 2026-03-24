@@ -1,20 +1,55 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-
+import { getApiErrorMessage, login } from '../services/authApi';
 
 const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const navigate = useNavigate();
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email === '' || password === '') {
+        if (email.trim() === '' || password === '') {
             setError('Vui lòng nhập đầy đủ thông tin đăng nhập.');
-        } else {
-            setError('');
-            alert('Đăng nhập thành công! (Chờ nối API)');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const response = await login({
+                username: email.trim(),
+                password,
+            });
+
+            if (!response.success) {
+                setError(response.message || 'Dang nhap that bai');
+                return;
+            }
+
+            // Lưu dữ liệu user
+            localStorage.setItem('user', JSON.stringify(response.data));
+
+            alert(response.message || 'Dang nhap thanh cong');
+            // Định nghĩa khuôn mẫu dữ liệu
+            const userData = response.data as { role: string; username: string };
+            const userRole = userData.role;
+            if (userRole === 'LECTURER') {
+                navigate('/dashboard/lecturer');
+            } else if (userRole === 'ADMIN') {
+                navigate('/dashboard/admin');
+            } else {
+                navigate('/dashboard/student'); // Sinh viên thì vào đây
+            }
+
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Khong the ket noi den Backend.'));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -25,10 +60,12 @@ const LoginPage = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="min-h-screen flex items-center justify-center w-full py-10"
+            // 🛠️ ĐÃ FIX: Chèn class bg- image và bg-[#050B20] vào dòng dưới này nè
+            className="min-h-screen flex items-center justify-center w-full py-10 bg-[#050B20] bg-[url('/login-bg.png')] bg-cover bg-center bg-no-repeat relative"
         >
 
-
+            {/* Phủ một lớp màu đen mờ (overlay) lên hình nền để chữ dễ đọc hơn (Tùy chọn) */}
+            <div className="absolute inset-0 bg-slate-900/40 z-0"></div>
 
             {/* TEXT TRANG TRÍ BÊN TRÁI */}
             <div className="absolute left-16 bottom-16 w-96 text-white hidden xl:block z-10">
@@ -118,9 +155,10 @@ const LoginPage = () => {
 
                             <button
                                 type="submit"
+                                disabled={isSubmitting}
                                 className="w-full mt-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-4 rounded-2xl font-bold shadow-[0_10px_20px_-10px_rgba(37,99,235,0.6)] hover:shadow-[0_15px_25px_-10px_rgba(37,99,235,0.7)] hover:-translate-y-0.5 active:translate-y-0.5 flex items-center justify-center gap-2 transition-all duration-300"
                             >
-                                Đăng nhập hệ thống
+                                {isSubmitting ? 'Dang xu ly...' : 'Đăng nhập hệ thống'}
                             </button>
 
                             <div className="text-center pt-2">
