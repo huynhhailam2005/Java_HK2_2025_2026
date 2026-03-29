@@ -12,12 +12,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/submissions")
 @CrossOrigin(origins = "http://localhost:5173")
-public class SubmissionRestController {
+public class SubmissionController {
 
     private final SubmissionService submissionService;
 
     @Autowired
-    public SubmissionRestController(SubmissionService submissionService) {
+    public SubmissionController(SubmissionService submissionService) {
         this.submissionService = submissionService;
     }
 

@@ -2,16 +2,23 @@ package srpm.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import srpm.dao.ISubmissionDAO;
+import org.springframework.transaction.annotation.Transactional;
 import srpm.model.Submission;
+import srpm.repository.SubmissionRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class SubmissionService {
 
-    @Autowired
-    private ISubmissionDAO submissionDAO;
+    private final SubmissionRepository submissionRepository;
 
+    @Autowired
+    public SubmissionService(SubmissionRepository submissionRepository) {
+        this.submissionRepository = submissionRepository;
+    }
+
+    @Transactional
     public void submit(Submission submission) {
-        submissionDAO.createSubmission(submission);
+        submissionRepository.save(submission);
     }
 }

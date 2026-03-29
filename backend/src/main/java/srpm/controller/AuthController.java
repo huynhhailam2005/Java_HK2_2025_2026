@@ -15,12 +15,12 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "http://localhost:5173")
-public class AuthRestController {
+public class AuthController {
 
     private final UserService userService;
 
     @Autowired
-    public AuthRestController(UserService userService) {
+    public AuthController(UserService userService) {
         this.userService = userService;
     }
 
@@ -46,7 +46,7 @@ public class AuthRestController {
             }
             if ("ADMIN".equalsIgnoreCase(regRequest.getRole())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new ApiResponse(false, "Không được phép đăng ký tài khoản Admin", null));
+                        .body(new ApiResponse(false, "Không được phép đăng ký tài khoản Admin !", null));
             }
             User user = UserFactory.createUser(regRequest.getRole());
 

@@ -1,4 +1,9 @@
 DROP TABLE IF EXISTS submission CASCADE;
+DROP TABLE IF EXISTS group_students CASCADE;
+DROP TABLE IF EXISTS groups CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS lecturers CASCADE;
+DROP TABLE IF EXISTS admins CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 CREATE TABLE users (
@@ -6,8 +11,23 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL,
-    student_id VARCHAR(20) UNIQUE
+    role VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE admins (
+    id VARCHAR(50) PRIMARY KEY,
+    CONSTRAINT fk_admin_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE lecturers (
+    id VARCHAR(50) PRIMARY KEY,
+    CONSTRAINT fk_lecturer_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE students (
+    id VARCHAR(50) PRIMARY KEY,
+    student_id VARCHAR(20) UNIQUE,
+    CONSTRAINT fk_student_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE submission (
@@ -16,12 +36,6 @@ CREATE TABLE submission (
     note TEXT,
     student_id BIGINT,
     project_id BIGINT
-);
-    username    VARCHAR(50)  UNIQUE NOT NULL,
-    password    VARCHAR(255) NOT NULL,
-    email       VARCHAR(100) UNIQUE NOT NULL,
-    role        VARCHAR(20)  NOT NULL,
-    student_id  VARCHAR(20)  UNIQUE
 );
 
 CREATE TABLE feedback (
@@ -45,15 +59,18 @@ CREATE TABLE IF NOT EXISTS feedbacks (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-DROP TABLE IF EXISTS topics CASCADE;
-
-CREATE TABLE topics (
+CREATE TABLE groups (
     id          VARCHAR(36)  PRIMARY KEY,
     title       VARCHAR(255) NOT NULL,
     description TEXT,
-    status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
-    lecturer_id VARCHAR(36),
-    student_id  VARCHAR(36),
-    created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    lecturer_id VARCHAR(50)  NOT NULL,
+    CONSTRAINT fk_group_lecturer FOREIGN KEY (lecturer_id) REFERENCES lecturers(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE group_students (
+    group_id   VARCHAR(36) NOT NULL,
+    student_id VARCHAR(50) NOT NULL,
+    PRIMARY KEY (group_id, student_id),
+    CONSTRAINT fk_group_students_group FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_group_students_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
