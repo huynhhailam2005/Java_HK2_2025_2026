@@ -10,7 +10,6 @@ public class UserFactory {
             case ADMIN -> new Admin();
             case LECTURER -> new Lecturer();
             case STUDENT -> new Student();
-            default -> throw new IllegalArgumentException("Unknown role: " + role);
         };
 
         user.setRole(role);

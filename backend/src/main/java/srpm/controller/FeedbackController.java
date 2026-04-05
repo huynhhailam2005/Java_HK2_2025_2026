@@ -9,7 +9,8 @@ import srpm.service.FeedbackService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/feedbacks") 
+@RequestMapping("/api/feedbacks")
+@CrossOrigin(origins = "http://localhost:5173")
 public class FeedbackController {
 
     @Autowired

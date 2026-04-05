@@ -3,6 +3,7 @@ package srpm.model;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
@@ -27,11 +28,18 @@ public class Feedback {
     @Column(name = "group_id", nullable = false, length = 50)
     private String groupId;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     // Constructor mặc định (Bắt buộc phải có cho Spring Boot)
     public Feedback() {}
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+    }
 
     // Constructor đầy đủ tham số
     public Feedback(String id, String content, int rating, String reviewerId, String groupId, LocalDateTime createdAt) {
