@@ -74,3 +74,28 @@ CREATE TABLE group_students (
     CONSTRAINT fk_group_students_group FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
     CONSTRAINT fk_group_students_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
+
+CREATE TABLE tasks (
+    id BIGSERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    due_date DATE,
+    status VARCHAR(20) NOT NULL DEFAULT 'TODO',
+    group_id VARCHAR(36) NOT NULL,
+    assignee_id VARCHAR(50),
+    created_by VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_task_group FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_assignee FOREIGN KEY (assignee_id) REFERENCES students(id) ON DELETE SET NULL,
+    CONSTRAINT fk_task_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE task_comments (
+    id BIGSERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    task_id BIGINT NOT NULL,
+    author_id VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_comment_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_comment_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+);
