@@ -3,12 +3,14 @@ package srpm.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.FetchType;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -27,12 +29,12 @@ public class Group {
     @Column(name = "description")
     private String description;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "lecturer_id", nullable = false)
     @JsonIgnoreProperties({"password", "email"})
     private Lecturer lecturer;
 
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "group_students",
             joinColumns = @JoinColumn(name = "group_id"),
