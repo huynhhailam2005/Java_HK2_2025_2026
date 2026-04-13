@@ -1,11 +1,14 @@
 package srpm.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.DiscriminatorType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
@@ -14,46 +17,48 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "users")
 @Inheritance(strategy = InheritanceType.JOINED)
-@DiscriminatorColumn(name = "role", discriminatorType = DiscriminatorType.STRING)
+@DiscriminatorColumn(name = "user_role", discriminatorType = DiscriminatorType.STRING, length = 31)
 public abstract class User {
 
     @Id
-    @Column(name = "id", length = 50)
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
+    private Long id;
 
     @Column(name = "username", nullable = false, unique = true, length = 50)
     private String username;
 
     @Column(name = "password", nullable = false, length = 255)
+    @JsonIgnore
     private String password;
 
     @Column(name = "email", nullable = false, unique = true, length = 100)
     private String email;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false, insertable = false, updatable = false, length = 20)
-    private Role role;
+    @Column(name = "user_role", nullable = false, insertable = false, updatable = false, length = 31)
+    private UserRole userRole;
+
 
     public User() {}
 
-    public User(String id, String username, String password, String email, Role role) {
-        this.id = id;
+    public User(String username, String password, String email, UserRole userRole) {
         this.username = username;
         this.password = password;
         this.email = email;
-        this.role = role;
+        this.userRole = userRole;
     }
 
-    public String getID() { return this.id; }
+    public Long getID() { return this.id; }
     public String getUsername() { return this.username; }
     public String getPassword() { return this.password; }
     public String getEmail() { return this.email; }
-    public Role getRole() { return this.role; }
+    public UserRole getRole() { return this.userRole; }
 
-    public void setID(String id) { this.id = id; }
+    public void setID(Long id) { this.id = id; }
     public void setUsername(String username) { this.username = username; }
     public void setPassword(String password) { this.password = password; }
     public void setEmail(String email) { this.email = email; }
-    public void setRole(Role role) { this.role = role; }
+    public void setRole(UserRole userRole) { this.userRole = userRole; }
 }
 

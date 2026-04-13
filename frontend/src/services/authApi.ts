@@ -6,6 +6,20 @@ export type AuthApiResponse = {
     data?: unknown;
 };
 
+export type AuthUser = {
+    id: number;
+    username: string;
+    email: string;
+    role: string;
+};
+
+export type LoginResponseData = {
+    token: string;
+    user: AuthUser;
+};
+
+export const AUTH_TOKEN_KEY = 'authToken';
+
 export type LoginPayload = {
     username: string;
     password: string;
@@ -27,6 +41,19 @@ const apiClient = axios.create({
     },
 });
 
+apiClient.interceptors.request.use((config) => {
+    const url = config.url || '';
+    if (url.startsWith('/api/auth/')) {
+        return config;
+    }
+
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
 export async function login(payload: LoginPayload): Promise<AuthApiResponse> {
     const response = await apiClient.post<AuthApiResponse>('/api/auth/login', payload);
     return response.data;
@@ -46,4 +73,3 @@ export function getApiErrorMessage(error: unknown, fallback = 'Khong the ket noi
     }
     return fallback;
 }
-

@@ -1,28 +1,34 @@
 package srpm.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import srpm.model.Role;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import srpm.model.UserRole;
 import srpm.model.User;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, String> {
+public interface UserRepository extends JpaRepository<User, Long> {
 
-    Optional<User> findByUsernameOrEmail(String username, String email);
+    @Query("SELECT u FROM User u WHERE u.username = :username OR u.email = :email")
+    Optional<User> findByUsernameOrEmail(@Param("username") String username, @Param("email") String email);
+
+    Optional<User> findByEmail(String email);
 
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
 
-    boolean existsByUsernameAndIdNot(String username, String id);
+    boolean existsByUsernameAndIdNot(String username, Long id);
 
-    boolean existsByEmailAndIdNot(String email, String id);
+    boolean existsByEmailAndIdNot(String email, Long id);
 
+    List<User> findAllByUserRoleOrderByUsernameAsc(UserRole userRole);
 
-    List<User> findAllByRoleOrderByUsernameAsc(Role role);
+    List<User> findAllByUserRoleInOrderByUsernameAsc(List<UserRole> userRoles);
 
-    List<User> findAllByRoleInOrderByUsernameAsc(List<Role> roles);
+    Optional<User> findByIdAndUserRoleIn(Long id, List<UserRole> userRoles);
 
-    Optional<User> findByIdAndRoleIn(String id, List<Role> roles);
+    Optional<User> findByUsername(String username);
 }

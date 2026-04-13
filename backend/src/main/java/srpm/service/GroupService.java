@@ -4,18 +4,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import srpm.dto.request.GroupRequest;
+import srpm.dto.request.UpdateGroupRequest;
 import srpm.model.Group;
+import srpm.model.GroupMember;
+import srpm.model.GroupMemberRole;
 import srpm.model.Lecturer;
 import srpm.model.Student;
+import srpm.repository.GroupMemberRepository;
 import srpm.repository.GroupRepository;
 import srpm.repository.LecturerRepository;
 import srpm.repository.StudentRepository;
 
-import java.util.HashSet;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -24,101 +26,208 @@ public class GroupService {
     private final GroupRepository groupRepository;
     private final LecturerRepository lecturerRepository;
     private final StudentRepository studentRepository;
+    private final GroupMemberRepository groupMemberRepository;
 
     @Autowired
     public GroupService(
             GroupRepository groupRepository,
             LecturerRepository lecturerRepository,
-            StudentRepository studentRepository
+            StudentRepository studentRepository,
+            GroupMemberRepository groupMemberRepository
     ) {
         this.groupRepository = groupRepository;
         this.lecturerRepository = lecturerRepository;
         this.studentRepository = studentRepository;
+        this.groupMemberRepository = groupMemberRepository;
     }
 
     /** Lấy tất cả group */
+    @Transactional
     public List<Group> getAllGroups() {
-        return groupRepository.findAll();
+        return groupRepository.findAllWithStudentsAndLecturer();
     }
 
     /** Lấy group theo id */
-    public Optional<Group> getGroupById(String id) {
-        return groupRepository.findById(id);
+    @Transactional
+    public Optional<Group> getGroupById(Long id) {
+        return groupRepository.findByIdWithStudentsAndLecturer(id);
     }
 
     /** Tạo group mới */
     @Transactional
     public Group createGroup(GroupRequest req) {
-        Lecturer lecturer = lecturerRepository.findById(req.getLecturerId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + req.getLecturerId()));
+        // Kiểm tra mã group trùng
+        if (groupRepository.existsByGroupCode(req.getGroupCode())) {
+            throw new RuntimeException("Mã group '" + req.getGroupCode() + "' đã tồn tại");
+        }
 
-        Set<Student> students = new HashSet<>();
-        if (req.getStudentIds() != null) {
-            for (String sid : req.getStudentIds()) {
-                Student s = studentRepository.findById(sid)
-                        .orElseThrow(() -> new RuntimeException("Không tìm thấy sinh viên: " + sid));
-                students.add(s);
+        // Kiểm tra tên group trùng
+        if (groupRepository.existsByGroupName(req.getGroupName())) {
+            throw new RuntimeException("Tên group '" + req.getGroupName() + "' đã tồn tại");
+        }
+
+        // Kiểm tra Jira URL + Project Key trùng
+        if (req.getJiraUrl() != null && req.getJiraProjectKey() != null) {
+            if (groupRepository.existsByJiraUrlAndProjectKey(req.getJiraUrl(), req.getJiraProjectKey())) {
+                throw new RuntimeException("Jira URL + Project Key này đã được sử dụng cho group khác");
             }
         }
 
-        Group group = new Group(UUID.randomUUID().toString(), req.getTitle(),
-                req.getDescription(), lecturer, students);
+        Lecturer lecturer = lecturerRepository.findByUserId(req.getLecturerId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + req.getLecturerId()));
+
+        Group group = new Group(req.getGroupCode(), req.getGroupName(), lecturer);
+        group.setCreatedAt(LocalDateTime.now());
+
+        if (req.getJiraUrl() != null) group.setJiraUrl(req.getJiraUrl());
+        if (req.getJiraProjectKey() != null) group.setJiraProjectKey(req.getJiraProjectKey());
+        if (req.getJiraApiToken() != null) group.setJiraApiToken(req.getJiraApiToken());
+        if (req.getJiraAdminEmail() != null) group.setJiraAdminEmail(req.getJiraAdminEmail());
+        if (req.getGithubRepoUrl() != null) group.setGithubRepoUrl(req.getGithubRepoUrl());
+        if (req.getGithubAccessToken() != null) group.setGithubAccessToken(req.getGithubAccessToken());
+
         return groupRepository.save(group);
     }
 
-    /** Cập nhật group */
+    /** Cập nhật tên group */
     @Transactional
-    public Optional<Group> updateGroup(String id, GroupRequest req) {
-        return groupRepository.findById(id).map(group -> {
-            if (req.getTitle() != null) group.setTitle(req.getTitle());
-            if (req.getDescription() != null) group.setDescription(req.getDescription());
+    public Optional<Group> updateGroupName(Long id, String newName) {
+        return groupRepository.findByIdWithStudentsAndLecturer(id).map(group -> {
+            if (newName != null && !newName.trim().isEmpty()) {
+                group.setGroupName(newName);
+                return groupRepository.save(group);
+            }
+            return group;
+        });
+    }
 
-            if (req.getLecturerId() != null) {
-                Lecturer lecturer = lecturerRepository.findById(req.getLecturerId())
-                        .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + req.getLecturerId()));
+    /** Cập nhật giảng viên cho group */
+    @Transactional
+    public Optional<Group> updateGroupLecturer(Long id, Long lecturerId) {
+        return groupRepository.findByIdWithStudentsAndLecturer(id).map(group -> {
+            if (lecturerId != null) {
+                Lecturer lecturer = lecturerRepository.findByUserId(lecturerId)
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + lecturerId));
+                group.setLecturer(lecturer);
+                return groupRepository.save(group);
+            }
+            return group;
+        });
+    }
+
+    /** Cập nhật toàn bộ thông tin group */
+    @Transactional
+    public Optional<Group> updateGroupInfo(Long id, UpdateGroupRequest request) {
+        return groupRepository.findByIdWithStudentsAndLecturer(id).map(group -> {
+            // Cập nhật tên group - kiểm tra trùng
+            if (request.getGroupName() != null && !request.getGroupName().trim().isEmpty()) {
+                if (!request.getGroupName().equals(group.getGroupName()) && 
+                    groupRepository.existsByGroupNameAndIdNot(request.getGroupName(), id)) {
+                    throw new RuntimeException("Tên group '" + request.getGroupName() + "' đã tồn tại");
+                }
+                group.setGroupName(request.getGroupName());
+            }
+
+            // Cập nhật giảng viên
+            if (request.getLecturerId() != null) {
+                Lecturer lecturer = lecturerRepository.findByUserId(request.getLecturerId())
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + request.getLecturerId()));
                 group.setLecturer(lecturer);
             }
 
-            if (req.getStudentIds() != null) {
-                Set<Student> students = new HashSet<>();
-                for (String sid : req.getStudentIds()) {
-                    Student s = studentRepository.findById(sid)
-                            .orElseThrow(() -> new RuntimeException("Không tìm thấy sinh viên: " + sid));
-                    students.add(s);
+            // Kiểm tra Jira URL + Project Key trùng trước khi update
+            if (request.getJiraUrl() != null || request.getJiraProjectKey() != null) {
+                String newJiraUrl = request.getJiraUrl() != null ? request.getJiraUrl() : group.getJiraUrl();
+                String newProjectKey = request.getJiraProjectKey() != null ? request.getJiraProjectKey() : group.getJiraProjectKey();
+                
+                if (newJiraUrl != null && newProjectKey != null) {
+                    // Nếu URL hoặc Key thay đổi, kiểm tra xem có trùng với group khác không
+                    if ((!newJiraUrl.equals(group.getJiraUrl()) || !newProjectKey.equals(group.getJiraProjectKey())) &&
+                        groupRepository.existsByJiraUrlAndProjectKeyAndIdNot(newJiraUrl, newProjectKey, id)) {
+                        throw new RuntimeException("Jira URL + Project Key này đã được sử dụng cho group khác");
+                    }
                 }
-                group.setStudents(students);
             }
+
+            // Cập nhật Jira thông tin
+            if (request.getJiraUrl() != null) {
+                group.setJiraUrl(request.getJiraUrl());
+            }
+            if (request.getJiraProjectKey() != null) {
+                group.setJiraProjectKey(request.getJiraProjectKey());
+            }
+            if (request.getJiraApiToken() != null) {
+                group.setJiraApiToken(request.getJiraApiToken());
+            }
+            if (request.getJiraAdminEmail() != null) {
+                group.setJiraAdminEmail(request.getJiraAdminEmail());
+            }
+
+            // Cập nhật GitHub thông tin
+            if (request.getGithubRepoUrl() != null) {
+                group.setGithubRepoUrl(request.getGithubRepoUrl());
+            }
+            if (request.getGithubAccessToken() != null) {
+                group.setGithubAccessToken(request.getGithubAccessToken());
+            }
+
             return groupRepository.save(group);
         });
     }
 
-    /** Xoá group */
+
+    /** Xóa group */
     @Transactional
-    public boolean deleteGroup(String id) {
+    public boolean deleteGroup(Long id) {
         if (!groupRepository.existsById(id)) return false;
         groupRepository.deleteById(id);
         return true;
     }
 
-    /** Thêm sinh viên vào group */
+    /** Thêm student vào group */
     @Transactional
-    public Optional<Group> addStudent(String groupId, String studentId) {
-        return groupRepository.findById(groupId).map(group -> {
+    public Group addStudent(Long groupId, Long studentId) {
+        try {
+            Group group = groupRepository.findById(groupId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy group: " + groupId));
+
             Student student = studentRepository.findById(studentId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy sinh viên: " + studentId));
-            group.getStudents().add(student);
-            return groupRepository.save(group);
-        });
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy student: " + studentId));
+
+            if (groupMemberRepository.findByGroupAndStudent(groupId, studentId).isPresent()) {
+                throw new RuntimeException("Student đã có trong group");
+            }
+
+            GroupMember member = new GroupMember(group, student, GroupMemberRole.TEAM_MEMBER);
+            groupMemberRepository.save(member);
+
+            // Refresh from database after saving
+            return groupRepository.findByIdWithStudentsAndLecturer(groupId)
+                    .orElseThrow(() -> new RuntimeException("Không thể tải lại group sau khi thêm student"));
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi khi thêm student vào group: " + e.getMessage(), e);
+        }
     }
 
-    /** Xoá sinh viên khỏi group */
+    /** Xóa student khỏi group */
     @Transactional
-    public Optional<Group> removeStudent(String groupId, String studentId) {
-        return groupRepository.findById(groupId).map(group -> {
-            group.getStudents().removeIf(s -> s.getID().equals(studentId));
-            return groupRepository.save(group);
-        });
+    public boolean removeStudent(Long groupId, Long studentId) {
+        Optional<GroupMember> memberOptional = groupMemberRepository.findByGroupAndStudent(groupId, studentId);
+
+        if (memberOptional.isPresent()) {
+            groupMemberRepository.delete(memberOptional.get());
+            return true;
+        }
+        return false;
+    }
+
+    public List<Group> getGroupsByLecturer(Long lecturerId) {
+        return groupRepository.findByLecturerId(lecturerId);
+    }
+
+    public List<Group> getGroupsByStudent(Long studentId) {
+        return groupMemberRepository.findGroupsByStudentId(studentId);
     }
 }
-
-

@@ -4,8 +4,6 @@ public class AdminUserManagementRequest {
     private String username;
     private String password;
     private String email;
-    private String role;
-    private String studentId;
 
     public AdminUserManagementRequest() {}
 
@@ -31,22 +29,6 @@ public class AdminUserManagementRequest {
 
     public void setEmail(String email) {
         this.email = email;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public String getStudentId() {
-        return studentId;
-    }
-
-    public void setStudentId(String studentId) {
-        this.studentId = studentId;
     }
 }
 

@@ -13,6 +13,7 @@ import {
     Menu
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { AUTH_TOKEN_KEY } from '../services/authApi';
 
 //Tạo khuôn đúc dữ liệu, cấm dùng 'any'
 interface UserData {
@@ -28,9 +29,21 @@ export default function DashboardLayout() {
     // 🛠️ ĐÃ FIX LỖI 2: Đọc localStorage ngay lúc khởi tạo (Lazy Init) để không bị lỗi Cascading Renders
     const [currentUser] = useState<UserData | null>(() => {
         const userDataStr = localStorage.getItem('user');
-        if (userDataStr) {
-            return JSON.parse(userDataStr) as UserData;
+        if (!userDataStr) {
+            return null;
         }
+
+        try {
+            const parsed = JSON.parse(userDataStr) as Partial<UserData>;
+            if (typeof parsed?.username === 'string' && typeof parsed?.role === 'string') {
+                return { username: parsed.username, role: parsed.role };
+            }
+        } catch {
+            // Clear corrupted auth cache to avoid rendering crash loops.
+            localStorage.removeItem('user');
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+        }
+
         return null;
     });
 
@@ -44,6 +57,7 @@ export default function DashboardLayout() {
     const handleLogout = () => {
         // 1. Xóa dữ liệu user khỏi kho
         localStorage.removeItem('user');
+        localStorage.removeItem(AUTH_TOKEN_KEY);
         // 2. Điều hướng về trang Login
         navigate('/');
     };

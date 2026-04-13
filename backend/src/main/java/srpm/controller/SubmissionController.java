@@ -1,12 +1,20 @@
 package srpm.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import srpm.dto.response.ApiResponse;
 import srpm.model.Submission;
+import srpm.model.Student;
+import srpm.model.User;
+import srpm.repository.GroupMemberRepository;
+import srpm.repository.UserRepository;
 import srpm.service.SubmissionService;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -15,47 +23,117 @@ import java.util.Map;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final UserRepository userRepository;
+    private final GroupMemberRepository groupMemberRepository;
 
     @Autowired
-    public SubmissionController(SubmissionService submissionService) {
+    public SubmissionController(
+            SubmissionService submissionService,
+            UserRepository userRepository,
+            GroupMemberRepository groupMemberRepository
+    ) {
         this.submissionService = submissionService;
+        this.userRepository = userRepository;
+        this.groupMemberRepository = groupMemberRepository;
     }
 
+    /**
+     * Sinh viên nộp bài cho một Issue
+     * POST /api/submissions
+     *
+     * Form data:
+     * - issueId: ID của Issue
+     * - content: Nội dung bài nộp (link hoặc text)
+     * - files: Danh sách file đính kèm (tuỳ chọn)
+     */
     @PostMapping
-    public ResponseEntity<?> submit(@RequestBody Submission submission) {
-
-        Map<String, Object> response = new HashMap<>();
-
-        // Kiểm tra dữ liệu đầu vào
-        if (submission.getStudentId() == null) {
-            response.put("message", "Student ID is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        if (submission.getProjectId() == null) {
-            response.put("message", "Project ID is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        if (submission.getFileUrl() == null || submission.getFileUrl().trim().isEmpty()) {
-            response.put("message", "File URL is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
+    public ResponseEntity<ApiResponse> submitIssue(
+            @RequestParam Long issueId,
+            @RequestParam String content,
+            @RequestParam(required = false) MultipartFile[] files
+    ) {
         try {
-            submissionService.submit(submission);
+            // ========== Lấy thông tin người nộp từ JWT ==========
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
+                        false,
+                        "Chưa xác thực",
+                        null
+                ));
+            }
 
-            response.put("message", "Submission successful");
-            response.put("data", submission);
+            String username = authentication.getName();
+            var userOptional = userRepository.findByUsernameOrEmail(username, username);
 
-            return ResponseEntity.ok(response);
+            if (userOptional.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
+                        false,
+                        "User không tồn tại",
+                        null
+                ));
+            }
 
+            User user = userOptional.get();
+
+            // Chỉ Student mới được nộp bài
+            if (!(user instanceof Student)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiResponse(
+                        false,
+                        "Chỉ sinh viên được phép nộp bài",
+                        null
+                ));
+            }
+
+            Student student = (Student) user;
+
+            // ========== Lấy GroupMember của student ==========
+            // Giả sử student chỉ thuộc 1 group (hoặc lấy group từ context)
+            var groupMembers = groupMemberRepository.findByStudent(student.getID());
+            if (groupMembers.isEmpty()) {
+                return ResponseEntity.badRequest().body(new ApiResponse(
+                        false,
+                        "Sinh viên không thuộc nhóm nào",
+                        null
+                ));
+            }
+
+            // Lấy member đầu tiên (hoặc có thể thêm groupId vào request)
+            var groupMember = groupMembers.get(0);
+
+            // ========== Gọi service để xử lý submission ==========
+            Submission submission = submissionService.submitForIssue(
+                    issueId,
+                    groupMember.getId(),
+                    content,
+                    files
+            );
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponse(
+                    true,
+                    "Nộp bài thành công",
+                    Map.of(
+                            "submissionId", submission.getId(),
+                            "submissionCode", submission.getSubmissionCode(),
+                            "issueId", submission.getIssue().getId(),
+                            "content", submission.getContent(),
+                            "submittedAt", submission.getSubmittedAt()
+                    )
+            ));
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new ApiResponse(
+                    false,
+                    e.getMessage(),
+                    null
+            ));
         } catch (Exception e) {
-
-            response.put("message", "Submission failed");
-            response.put("error", e.getMessage());
-
-            return ResponseEntity.internalServerError().body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiResponse(
+                    false,
+                    "Lỗi nộp bài: " + e.getMessage(),
+                    null
+            ));
         }
     }
 }
+

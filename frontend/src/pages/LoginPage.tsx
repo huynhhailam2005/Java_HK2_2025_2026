@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { getApiErrorMessage, login } from '../services/authApi';
+import { AUTH_TOKEN_KEY, getApiErrorMessage, login } from '../services/authApi';
+import type { LoginResponseData } from '../services/authApi';
 // 🛠️ Import hàm hú Toast từ App
 import { showLiquidToast } from '../utils/toast.ts';
 
@@ -19,16 +20,6 @@ const LoginPage = () => {
             return;
         }
 
-        // CHEAT CODE DÀNH CHO ADMIN TEST
-        if (email.trim() === 'admin' && password === '123') {
-            const fakeAdmin = { username: 'Trùm Cuối', role: 'ADMIN' };
-            localStorage.setItem('user', JSON.stringify(fakeAdmin));
-
-            showLiquidToast('Đăng nhập ẩn danh: ADMIN', 'success');
-            setTimeout(() => navigate('/dashboard/admin'), 800);
-            return;
-        }
-
         setIsSubmitting(true);
         setError('');
 
@@ -42,12 +33,14 @@ const LoginPage = () => {
                 return;
             }
 
-            localStorage.setItem('user', JSON.stringify(response.data));
+            const loginData = response.data as LoginResponseData;
+            localStorage.setItem('user', JSON.stringify(loginData.user));
+            localStorage.setItem(AUTH_TOKEN_KEY, loginData.token);
 
             // ✅ BẮN TOAST (Nó sẽ sống xuyên qua quá trình chuyển trang)
             showLiquidToast('Đăng nhập thành công! Chào mừng trở lại.', 'success');
 
-            const userData = response.data as { role: string; username: string };
+            const userData = loginData.user;
             const userRole = userData.role;
 
             // Chuyển trang sau 0.8s để user kịp thấy hiệu ứng nảy của Toast

@@ -1,6 +1,6 @@
 package srpm.model;
 
-public enum Role {
+public enum UserRole {
     ADMIN,
     LECTURER,
     STUDENT

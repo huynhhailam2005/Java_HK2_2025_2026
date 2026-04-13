@@ -1,101 +1,128 @@
-DROP TABLE IF EXISTS submission CASCADE;
-DROP TABLE IF EXISTS group_students CASCADE;
+-- Drop all tables
+DROP TABLE IF EXISTS attachments CASCADE;
+DROP TABLE IF EXISTS feedbacks CASCADE;
+DROP TABLE IF EXISTS submissions CASCADE;
+DROP TABLE IF EXISTS issues CASCADE;
+DROP TABLE IF EXISTS group_members CASCADE;
 DROP TABLE IF EXISTS groups CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
 DROP TABLE IF EXISTS lecturers CASCADE;
 DROP TABLE IF EXISTS admins CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
+
+-- Users
 CREATE TABLE users (
-    id VARCHAR(50) PRIMARY KEY,
+    user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL
+    password VARCHAR(255) NOT NULL,
+    user_role VARCHAR(31) NOT NULL CHECK (user_role IN ('ADMIN', 'LECTURER', 'STUDENT'))
 );
 
+
+-- Admins
 CREATE TABLE admins (
-    id VARCHAR(50) PRIMARY KEY,
-    CONSTRAINT fk_admin_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    admin_code VARCHAR(20) UNIQUE NOT NULL
 );
 
+
+-- Lecturers
 CREATE TABLE lecturers (
-    id VARCHAR(50) PRIMARY KEY,
-    CONSTRAINT fk_lecturer_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    lecturer_code VARCHAR(20) UNIQUE NOT NULL
 );
 
+
+-- Students
 CREATE TABLE students (
-    id VARCHAR(50) PRIMARY KEY,
-    student_id VARCHAR(20) UNIQUE,
-    CONSTRAINT fk_student_user FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    student_code VARCHAR(20) UNIQUE NOT NULL,
+    jira_account_id VARCHAR(255) UNIQUE,
+    github_username VARCHAR(255) UNIQUE
 );
 
-CREATE TABLE submission (
-    id SERIAL PRIMARY KEY,
-    file_url TEXT,
-    note TEXT,
-    student_id BIGINT,
-    project_id BIGINT
-);
 
-CREATE TABLE feedback (
-    id SERIAL PRIMARY KEY,
-    content TEXT NOT NULL,
-    rating INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    student_id VARCHAR(50),
-    lecturer_id VARCHAR(50)
-);
-
-drop table feedback;
-
-CREATE TABLE IF NOT EXISTS feedbacks (
-    id VARCHAR(50) PRIMARY KEY,
-    content TEXT NOT NULL,
-    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
-    reviewer_id VARCHAR(50) NOT NULL, -- ID của Giảng viên
-    group_id VARCHAR(50) NOT NULL,    -- ID của Nhóm bị đánh giá
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
+-- Groups
 CREATE TABLE groups (
-    id          VARCHAR(36)  PRIMARY KEY,
-    title       VARCHAR(255) NOT NULL,
-    description TEXT,
-    lecturer_id VARCHAR(50)  NOT NULL,
-    CONSTRAINT fk_group_lecturer FOREIGN KEY (lecturer_id) REFERENCES lecturers(id) ON DELETE RESTRICT
+    group_id BIGSERIAL PRIMARY KEY,
+    group_code VARCHAR(20) UNIQUE NOT NULL,
+    group_name VARCHAR(255) NOT NULL,
+    lecturer_id BIGINT NOT NULL REFERENCES lecturers(user_id) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    jira_url VARCHAR(500),
+    jira_project_key VARCHAR(50),
+    jira_api_token VARCHAR(255),
+    jira_admin_email VARCHAR(255),
+    github_repo_url VARCHAR(500),
+    github_access_token VARCHAR(255)
 );
 
-CREATE TABLE group_students (
-    group_id   VARCHAR(36) NOT NULL,
-    student_id VARCHAR(50) NOT NULL,
-    PRIMARY KEY (group_id, student_id),
-    CONSTRAINT fk_group_students_group FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
-    CONSTRAINT fk_group_students_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+
+-- Group Members
+CREATE TABLE group_members (
+    group_member_id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL REFERENCES groups(group_id) ON DELETE CASCADE,
+    student_id BIGINT NOT NULL REFERENCES students(user_id) ON DELETE CASCADE,
+    group_member_role VARCHAR(50) NOT NULL DEFAULT 'member',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_group_student UNIQUE (group_id, student_id)
 );
 
-CREATE TABLE tasks (
-    id BIGSERIAL PRIMARY KEY,
+
+-- Issues
+CREATE TABLE issues (
+    issue_id BIGSERIAL PRIMARY KEY,
+    issue_code VARCHAR(20) UNIQUE,
+    group_id BIGINT NOT NULL REFERENCES groups(group_id) ON DELETE CASCADE,
+    assigned_to_member_id BIGINT REFERENCES group_members(group_member_id) ON DELETE SET NULL,
+    parent_id BIGINT REFERENCES issues(issue_id) ON DELETE CASCADE,
     title VARCHAR(200) NOT NULL,
     description TEXT,
-    due_date DATE,
-    status VARCHAR(20) NOT NULL DEFAULT 'TODO',
-    group_id VARCHAR(36) NOT NULL,
-    assignee_id VARCHAR(50),
-    created_by VARCHAR(50) NOT NULL,
+    deadline TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED')),
+    issue_type VARCHAR(50) NOT NULL DEFAULT 'TASK' CHECK (issue_type IN ('TASK', 'BUG', 'STORY', 'SUB_TASK', 'EPIC')),
+    sync_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (sync_status IN ('PENDING', 'SYNCED', 'ERROR')),
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_task_group FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
-    CONSTRAINT fk_task_assignee FOREIGN KEY (assignee_id) REFERENCES students(id) ON DELETE SET NULL,
-    CONSTRAINT fk_task_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT chk_epic_no_parent CHECK (issue_type != 'EPIC' OR parent_id IS NULL),
+    CONSTRAINT chk_subtask_has_parent CHECK (issue_type != 'SUB_TASK' OR parent_id IS NOT NULL)
 );
 
-CREATE TABLE task_comments (
-    id BIGSERIAL PRIMARY KEY,
+
+-- Submissions
+CREATE TABLE submissions (
+    submission_id BIGSERIAL PRIMARY KEY,
+    submission_code VARCHAR(20) UNIQUE NOT NULL,
+    issue_id BIGINT NOT NULL REFERENCES issues(issue_id) ON DELETE CASCADE,
+    submitted_by_member_id BIGINT NOT NULL REFERENCES group_members(group_member_id) ON DELETE CASCADE,
+    content TEXT,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Attachments
+CREATE TABLE attachments (
+    attachment_id BIGSERIAL PRIMARY KEY,
+    attachment_code VARCHAR(20) UNIQUE NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_url VARCHAR(500) NOT NULL,
+    file_type VARCHAR(50),
+    issue_id BIGINT REFERENCES issues(issue_id) ON DELETE CASCADE,
+    submission_id BIGINT REFERENCES submissions(submission_id) ON DELETE CASCADE,
+    uploader_member_id BIGINT NOT NULL REFERENCES group_members(group_member_id) ON DELETE CASCADE,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Feedbacks
+CREATE TABLE feedbacks (
+    feedback_id BIGSERIAL PRIMARY KEY,
+    feedback_code VARCHAR(20) UNIQUE NOT NULL,
+    submission_id BIGINT NOT NULL REFERENCES submissions(submission_id) ON DELETE CASCADE,
+    feedback_by_user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    task_id BIGINT NOT NULL,
-    author_id VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_comment_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-    CONSTRAINT fk_comment_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+    rating INT CHECK (rating >= 1 AND rating <= 5),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

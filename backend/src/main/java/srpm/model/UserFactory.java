@@ -4,16 +4,16 @@ public class UserFactory {
     public static User createUser(String roleStr) {
         if (roleStr == null) { return null; }
 
-        Role role = Role.valueOf(roleStr.toUpperCase());
+        UserRole userRole = UserRole.valueOf(roleStr.toUpperCase());
 
-        User user = switch (role) {
+        User user = switch (userRole) {
             case ADMIN -> new Admin();
             case LECTURER -> new Lecturer();
             case STUDENT -> new Student();
-            default -> throw new IllegalArgumentException("Unknown role: " + role);
+            default -> throw new IllegalArgumentException("Unknown role: " + userRole);
         };
 
-        user.setRole(role);
+        user.setRole(userRole);
 
         return user;
     }

@@ -1,29 +1,44 @@
 package srpm.dto.response;
 
-import srpm.model.Role;
+import srpm.model.UserRole;
 
 public class AdminUserManagementResponse {
-    private String id;
+    private Long id;
     private String username;
     private String email;
-    private Role role;
-    private String studentId;
+    private UserRole userRole;
+    private String studentCode;
+    private String lecturerCode;
+    private String jiraAccountId;
+    private String githubUsername;
 
     public AdminUserManagementResponse() {}
 
-    public AdminUserManagementResponse(String id, String username, String email, Role role, String studentId) {
+    public AdminUserManagementResponse(Long id, String username, String email, UserRole userRole) {
         this.id = id;
         this.username = username;
         this.email = email;
-        this.role = role;
-        this.studentId = studentId;
+        this.userRole = userRole;
     }
 
-    public String getId() {
+    public AdminUserManagementResponse(Long id, String username, String email, UserRole userRole,
+                                       String studentCode, String lecturerCode,
+                                       String jiraAccountId, String githubUsername) {
+        this.id = id;
+        this.username = username;
+        this.email = email;
+        this.userRole = userRole;
+        this.studentCode = studentCode;
+        this.lecturerCode = lecturerCode;
+        this.jiraAccountId = jiraAccountId;
+        this.githubUsername = githubUsername;
+    }
+
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -43,20 +58,43 @@ public class AdminUserManagementResponse {
         this.email = email;
     }
 
-    public Role getRole() {
-        return role;
+    public UserRole getRole() {
+        return userRole;
     }
 
-    public void setRole(Role role) {
-        this.role = role;
+    public void setRole(UserRole userRole) {
+        this.userRole = userRole;
     }
 
-    public String getStudentId() {
-        return studentId;
+    public String getStudentCode() {
+        return studentCode;
     }
 
-    public void setStudentId(String studentId) {
-        this.studentId = studentId;
+    public void setStudentCode(String studentCode) {
+        this.studentCode = studentCode;
+    }
+
+    public String getLecturerCode() {
+        return lecturerCode;
+    }
+
+    public void setLecturerCode(String lecturerCode) {
+        this.lecturerCode = lecturerCode;
+    }
+
+    public String getJiraAccountId() {
+        return jiraAccountId;
+    }
+
+    public void setJiraAccountId(String jiraAccountId) {
+        this.jiraAccountId = jiraAccountId;
+    }
+
+    public String getGithubUsername() {
+        return githubUsername;
+    }
+
+    public void setGithubUsername(String githubUsername) {
+        this.githubUsername = githubUsername;
     }
 }
-
