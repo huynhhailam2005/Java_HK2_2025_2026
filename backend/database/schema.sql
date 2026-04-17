@@ -1,6 +1,4 @@
 -- Drop all tables
-DROP TABLE IF EXISTS attachments CASCADE;
-DROP TABLE IF EXISTS feedbacks CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
 DROP TABLE IF EXISTS issues CASCADE;
 DROP TABLE IF EXISTS group_members CASCADE;
@@ -99,30 +97,4 @@ CREATE TABLE submissions (
     submitted_by_member_id BIGINT NOT NULL REFERENCES group_members(group_member_id) ON DELETE CASCADE,
     content TEXT,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-
--- Attachments
-CREATE TABLE attachments (
-    attachment_id BIGSERIAL PRIMARY KEY,
-    attachment_code VARCHAR(20) UNIQUE NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_url VARCHAR(500) NOT NULL,
-    file_type VARCHAR(50),
-    issue_id BIGINT REFERENCES issues(issue_id) ON DELETE CASCADE,
-    submission_id BIGINT REFERENCES submissions(submission_id) ON DELETE CASCADE,
-    uploader_member_id BIGINT NOT NULL REFERENCES group_members(group_member_id) ON DELETE CASCADE,
-    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-
--- Feedbacks
-CREATE TABLE feedbacks (
-    feedback_id BIGSERIAL PRIMARY KEY,
-    feedback_code VARCHAR(20) UNIQUE NOT NULL,
-    submission_id BIGINT NOT NULL REFERENCES submissions(submission_id) ON DELETE CASCADE,
-    feedback_by_user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    rating INT CHECK (rating >= 1 AND rating <= 5),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -28,4 +28,8 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     // Lấy tất cả GroupMembers của một Student
     @Query("SELECT gm FROM GroupMember gm WHERE gm.student.id = :studentId")
     java.util.List<GroupMember> findByStudent(@Param("studentId") Long studentId);
+
+    // Lấy tất cả GroupMembers của một Group
+    @Query("SELECT gm FROM GroupMember gm WHERE gm.group.id = :groupId")
+    java.util.List<GroupMember> findByGroup(@Param("groupId") Long groupId);
 }

@@ -5,14 +5,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 import srpm.model.*;
 import srpm.repository.SubmissionRepository;
 import srpm.repository.IssueRepository;
 import srpm.repository.GroupMemberRepository;
-import srpm.repository.AttachmentRepository;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -23,7 +20,6 @@ public class SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final IssueRepository issueRepository;
     private final GroupMemberRepository groupMemberRepository;
-    private final AttachmentRepository attachmentRepository;
     private final JiraIssuePushService jiraIssuePushService;
     private static final Logger logger = LoggerFactory.getLogger(SubmissionService.class);
 
@@ -32,13 +28,11 @@ public class SubmissionService {
             SubmissionRepository submissionRepository,
             IssueRepository issueRepository,
             GroupMemberRepository groupMemberRepository,
-            AttachmentRepository attachmentRepository,
             JiraIssuePushService jiraIssuePushService
     ) {
         this.submissionRepository = submissionRepository;
         this.issueRepository = issueRepository;
         this.groupMemberRepository = groupMemberRepository;
-        this.attachmentRepository = attachmentRepository;
         this.jiraIssuePushService = jiraIssuePushService;
     }
 
@@ -48,14 +42,12 @@ public class SubmissionService {
      * @param issueId ID của Issue
      * @param groupMemberId ID của GroupMember (người nộp)
      * @param content Nội dung bài nộp (link hoặc text)
-     * @param files Danh sách file đính kèm (tuỳ chọn)
      * @return Submission vừa được tạo
      */
     public Submission submitForIssue(
             Long issueId,
             Long groupMemberId,
-            String content,
-            MultipartFile[] files
+            String content
     ) {
         logger.info("Sinh viên {} nộp bài cho Issue {}", groupMemberId, issueId);
 
@@ -104,20 +96,6 @@ public class SubmissionService {
         submission = submissionRepository.save(submission);
         logger.info("✓ Tạo Submission thành công: {}", submissionCode);
 
-        // ========== Xử lý Files ==========
-        if (files != null && files.length > 0) {
-            for (MultipartFile file : files) {
-                if (!file.isEmpty()) {
-                    try {
-                        Attachment attachment = createAttachmentFromFile(file, submission, submitter);
-                        logger.info("✓ Upload file thành công: {}", attachment.getFileName());
-                    } catch (IOException e) {
-                        logger.error("Lỗi upload file: {}", e.getMessage());
-                        throw new RuntimeException("Lỗi upload file: " + e.getMessage());
-                    }
-                }
-            }
-        }
 
         // ========== Cập nhật Issue status ==========
         issue.setStatus(IssueStatus.DONE);
@@ -146,46 +124,6 @@ public class SubmissionService {
     }
 
     /**
-     * Tạo Attachment từ MultipartFile
-     */
-    private Attachment createAttachmentFromFile(
-            MultipartFile file,
-            Submission submission,
-            GroupMember uploader
-    ) throws IOException {
-        // Generate file name
-        String originalFileName = file.getOriginalFilename();
-        String extension = getFileExtension(originalFileName);
-        String savedFileName = UUID.randomUUID().toString() + "." + extension;
-
-        // TODO: Lưu file vào S3/local storage
-        // Tạm thời: giả sử file được lưu
-        String fileUrl = "/uploads/" + savedFileName;
-
-        Attachment attachment = new Attachment();
-        attachment.setAttachmentCode(generateAttachmentCode());
-        attachment.setFileName(originalFileName);
-        attachment.setFileUrl(fileUrl);
-        attachment.setFileType(file.getContentType());
-        attachment.setSubmission(submission);
-        attachment.setUploader(uploader);
-        attachment.setUploadedAt(LocalDateTime.now());
-
-        attachment = attachmentRepository.save(attachment);
-        return attachment;
-    }
-
-    /**
-     * Lấy extension từ file name
-     */
-    private String getFileExtension(String fileName) {
-        if (fileName == null || !fileName.contains(".")) {
-            return "unknown";
-        }
-        return fileName.substring(fileName.lastIndexOf(".") + 1);
-    }
-
-    /**
      * Sinh mã Submission: SUB-{TIMESTAMP}-{RANDOM}
      * Tổng độ dài: 4 + 8 + 1 + 4 = 17 character (dưới limit 20)
      */
@@ -193,14 +131,6 @@ public class SubmissionService {
         String timestamp = String.valueOf(System.currentTimeMillis());
         String random = UUID.randomUUID().toString().substring(0, 4);
         return "SUB-" + timestamp.substring(timestamp.length() - 8) + "-" + random;
-    }
-
-    /**
-     * Sinh mã Attachment: ATT-{RANDOM}
-     * Tổng độ dài: 4 + 8 = 12 character (dưới limit 20)
-     */
-    private String generateAttachmentCode() {
-        return "ATT-" + UUID.randomUUID().toString().substring(0, 8);
     }
 }
 

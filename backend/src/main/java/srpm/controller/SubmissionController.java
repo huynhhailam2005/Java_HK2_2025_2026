@@ -6,7 +6,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import srpm.dto.response.ApiResponse;
 import srpm.model.Submission;
 import srpm.model.Student;
@@ -44,13 +43,11 @@ public class SubmissionController {
      * Form data:
      * - issueId: ID của Issue
      * - content: Nội dung bài nộp (link hoặc text)
-     * - files: Danh sách file đính kèm (tuỳ chọn)
      */
     @PostMapping
     public ResponseEntity<ApiResponse> submitIssue(
             @RequestParam Long issueId,
-            @RequestParam String content,
-            @RequestParam(required = false) MultipartFile[] files
+            @RequestParam String content
     ) {
         try {
             // ========== Lấy thông tin người nộp từ JWT ==========
@@ -105,8 +102,7 @@ public class SubmissionController {
             Submission submission = submissionService.submitForIssue(
                     issueId,
                     groupMember.getId(),
-                    content,
-                    files
+                    content
             );
 
             return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponse(

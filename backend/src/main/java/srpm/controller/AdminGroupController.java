@@ -36,7 +36,7 @@ public class AdminGroupController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'LECTURER', 'STUDENT')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse> getAllGroups() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -63,7 +63,7 @@ public class AdminGroupController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'LECTURER', 'STUDENT')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> getGroup(@PathVariable Long id) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -100,6 +100,7 @@ public class AdminGroupController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createGroup(@RequestBody GroupRequest request) {
         try {
             Group group = groupService.createGroup(request);
@@ -113,6 +114,7 @@ public class AdminGroupController {
 
 
     @PatchMapping("/{id}/name")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> updateGroupName(@PathVariable Long id,
                                              @RequestBody Map<String, String> request) {
         try {
