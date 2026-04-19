@@ -12,12 +12,11 @@ import srpm.dto.request.CreateIssueRequest;
 import srpm.dto.request.JiraIssueSyncRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.model.*;
-import srpm.service.GroupAccessService;
-import srpm.service.IssueService;
-import srpm.service.JiraIssueSyncService;
-import srpm.service.JiraIssuePushService;
+import srpm.service.impl.GroupAccessService;
+import srpm.service.impl.IssueService;
+import srpm.service.impl.JiraIssueSyncService;
+import srpm.service.impl.JiraIssuePushService;
 import srpm.repository.IssueRepository;
-import srpm.repository.GroupRepository;
 import srpm.repository.UserRepository;
 
 import java.util.Map;
@@ -33,9 +32,8 @@ public class JiraIssueSyncController {
     private final JiraIssuePushService jiraIssuePushService;
     private final IssueService issueService;
     private final GroupAccessService groupAccessService;
-    private final IssueRepository issueRepository;
-    private final GroupRepository groupRepository;
-    private final UserRepository userRepository;
+    private final IssueRepository issueDao;
+    private final UserRepository userDao;
 
     @Autowired
     public JiraIssueSyncController(
@@ -43,17 +41,15 @@ public class JiraIssueSyncController {
             JiraIssuePushService jiraIssuePushService,
             IssueService issueService,
             GroupAccessService groupAccessService,
-            IssueRepository issueRepository,
-            GroupRepository groupRepository,
-            UserRepository userRepository
+            IssueRepository issueDao,
+            UserRepository userDao
     ) {
         this.jiraIssueSyncService = jiraIssueSyncService;
         this.jiraIssuePushService = jiraIssuePushService;
         this.issueService = issueService;
         this.groupAccessService = groupAccessService;
-        this.issueRepository = issueRepository;
-        this.groupRepository = groupRepository;
-        this.userRepository = userRepository;
+        this.issueDao = issueDao;
+        this.userDao = userDao;
     }
 
     /**
@@ -155,7 +151,7 @@ public class JiraIssueSyncController {
     @PostMapping("/{issueId}/push-create")
     public ResponseEntity<ApiResponse> createIssueOnJira(@PathVariable Long issueId) {
         try {
-            Issue issue = issueRepository.findById(issueId)
+            Issue issue = issueDao.findById(issueId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy Issue: " + issueId));
 
             // ✅ Kiểm tra authorization: chỉ Team Leader của group được phép
@@ -217,7 +213,7 @@ public class JiraIssueSyncController {
     @PutMapping("/{issueId}/push-update")
     public ResponseEntity<ApiResponse> updateIssueOnJira(@PathVariable Long issueId) {
         try {
-            Issue issue = issueRepository.findById(issueId)
+            Issue issue = issueDao.findById(issueId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy Issue: " + issueId));
 
             // ✅ Kiểm tra authorization: chỉ Team Leader của group được phép
@@ -278,7 +274,7 @@ public class JiraIssueSyncController {
     @DeleteMapping("/{issueId}/push-delete")
     public ResponseEntity<ApiResponse> deleteIssueOnJira(@PathVariable Long issueId) {
         try {
-            Issue issue = issueRepository.findById(issueId)
+            Issue issue = issueDao.findById(issueId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy Issue: " + issueId));
 
             // ✅ Kiểm tra authorization: chỉ Team Leader của group được phép
@@ -306,7 +302,8 @@ public class JiraIssueSyncController {
                     group.getJiraApiToken()
             );
 
-            Issue deletedIssue = issueRepository.findById(issueId).get();
+            			Issue deletedIssue = issueDao.findById(issueId)
+            					.orElseThrow(() -> new RuntimeException("Không tìm thấy Issue sau khi xóa: " + issueId));
             return ResponseEntity.ok(new ApiResponse(
                     true,
                     "Xóa Issue thành công (Soft-Delete)",
@@ -343,7 +340,7 @@ public class JiraIssueSyncController {
             @RequestBody Map<String, String> request
     ) {
         try {
-            Issue issue = issueRepository.findById(issueId)
+            Issue issue = issueDao.findById(issueId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy Issue: " + issueId));
 
             String newStatusStr = request.get("status");
@@ -367,7 +364,7 @@ public class JiraIssueSyncController {
             }
 
             String username = authentication.getName();
-            var userOptional = userRepository.findByUsernameOrEmail(username, username);
+            var userOptional = userDao.findByUsernameOrEmail(username, username);
 
             if (userOptional.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
@@ -398,7 +395,7 @@ public class JiraIssueSyncController {
             // ========== Validate trạng thái ==========
             IssueStatus newStatus;
             try {
-                newStatus = IssueStatus.valueOf(newStatusStr);
+                newStatus = IssueStatus.fromValue(newStatusStr);
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().body(new ApiResponse(
                         false,
@@ -411,7 +408,7 @@ public class JiraIssueSyncController {
 
             // ========== Cập nhật trạng thái ==========
             issue.setStatus(newStatus);
-            issue = issueRepository.save(issue);
+            issue = issueDao.save(issue);
 
             logger.info("✓ Cập nhật trạng thái Issue {} từ {} sang {}", issueId, oldStatus, newStatus);
 

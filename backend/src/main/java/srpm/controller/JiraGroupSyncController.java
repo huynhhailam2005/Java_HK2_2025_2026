@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.*;
 import srpm.dto.request.JiraSyncRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.dto.response.JiraGroupDto;
-import srpm.service.GroupAccessService;
-import srpm.service.JiraGroupSyncService;
+import srpm.service.impl.GroupAccessService;
+import srpm.service.impl.JiraGroupSyncService;
 
 import java.util.List;
 

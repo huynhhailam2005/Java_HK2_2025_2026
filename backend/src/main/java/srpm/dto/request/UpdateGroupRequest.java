@@ -1,7 +1,11 @@
 package srpm.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
+
 public class UpdateGroupRequest {
+    @NotBlank(message = "Group name không được để trống")
     private String groupName;
+
     private Long lecturerId;
     private String jiraUrl;
     private String jiraProjectKey;

@@ -1,11 +1,27 @@
 package srpm.model;
 
-/**
- * Trạng thái đồng bộ của Issue giữa SRPM và Jira
- */
 public enum SyncStatus {
-    PENDING,  // Đang chờ đồng bộ
-    SYNCED,   // Đã đồng bộ thành công
-    ERROR     // Lỗi đồng bộ
+    PENDING("PENDING"),
+    SYNCED("SYNCED"),
+    ERROR("ERROR");
+
+    private final String value;
+
+    SyncStatus(String value) {
+        this.value = value;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public static SyncStatus fromValue(String value) {
+        for (SyncStatus status : SyncStatus.values()) {
+            if (status.value.equalsIgnoreCase(value)) {
+                return status;
+            }
+        }
+        throw new IllegalArgumentException("Invalid SyncStatus: " + value);
+    }
 }
 

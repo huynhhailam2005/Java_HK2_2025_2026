@@ -11,7 +11,7 @@ import srpm.dto.response.ApiResponse;
 import srpm.model.Lecturer;
 import srpm.model.Student;
 import srpm.model.User;
-import srpm.service.UserService;
+import srpm.service.impl.UserService;
 
 @RestController
 @RequestMapping("/api/users")
@@ -25,9 +25,7 @@ public class UserController {
         this.userService = userService;
     }
 
-    /**
-     * Lấy thông tin user theo ID
-     */
+    // Lấy thông tin user theo ID
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse> getUserById(@PathVariable Long userId) {
         try {
@@ -44,9 +42,7 @@ public class UserController {
         }
     }
 
-    /**
-     * Cập nhật thông tin user chung (username, email, password)
-     */
+    // Cập nhật thông tin user chung (username, email, password)
     @PutMapping("/{userId}")
     public ResponseEntity<ApiResponse> updateUserInfo(
             @PathVariable Long userId,
@@ -69,9 +65,7 @@ public class UserController {
         }
     }
 
-    /**
-     * Cập nhật thông tin Lecturer (username, email, password, lecturerId)
-     */
+    // Cập nhật thông tin Lecturer (username, email, password, lecturerId)
     @PutMapping("/{userId}/lecturer")
     public ResponseEntity<ApiResponse> updateLecturerInfo(
             @PathVariable Long userId,
@@ -95,9 +89,7 @@ public class UserController {
         }
     }
 
-    /**
-     * Cập nhật thông tin Student (username, email, password, studentId, jiraAccountId, githubUsername)
-     */
+    // Cập nhật thông tin Student (username, email, password, studentId, jiraAccountId, githubUsername)
     @PutMapping("/{userId}/student")
     public ResponseEntity<ApiResponse> updateStudentInfo(
             @PathVariable Long userId,

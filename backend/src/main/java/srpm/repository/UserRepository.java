@@ -1,34 +1,42 @@
 package srpm.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-import srpm.model.UserRole;
 import srpm.model.User;
+import srpm.model.UserRole;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+/**
+ * Repository wrapper contract for {@link User}.
+ * <p>
+ * This layer intentionally does NOT depend on Spring Data; it wraps the DAO layer
+ * and is the default dependency for services.
+ */
+public interface UserRepository {
 
-    @Query("SELECT u FROM User u WHERE u.username = :username OR u.email = :email")
-    Optional<User> findByUsernameOrEmail(@Param("username") String username, @Param("email") String email);
+	Optional<User> findById(Long id);
 
-    Optional<User> findByEmail(String email);
+	Optional<User> findByUsernameOrEmail(String username, String email);
 
-    boolean existsByUsername(String username);
+	Optional<User> findByEmail(String email);
 
-    boolean existsByEmail(String email);
+	Optional<User> findByUsername(String username);
 
-    boolean existsByUsernameAndIdNot(String username, Long id);
+	boolean existsByUsername(String username);
 
-    boolean existsByEmailAndIdNot(String email, Long id);
+	boolean existsByEmail(String email);
 
-    List<User> findAllByUserRoleOrderByUsernameAsc(UserRole userRole);
+	boolean existsByUsernameAndIdNot(String username, Long id);
 
-    List<User> findAllByUserRoleInOrderByUsernameAsc(List<UserRole> userRoles);
+	boolean existsByEmailAndIdNot(String email, Long id);
 
-    Optional<User> findByIdAndUserRoleIn(Long id, List<UserRole> userRoles);
+	List<User> findAllByUserRoleOrderByUsernameAsc(UserRole userRole);
 
-    Optional<User> findByUsername(String username);
+	List<User> findAllByUserRoleInOrderByUsernameAsc(List<UserRole> userRoles);
+
+	Optional<User> findByIdAndUserRoleIn(Long id, List<UserRole> userRoles);
+
+	User save(User user);
+
+	void deleteById(Long id);
 }

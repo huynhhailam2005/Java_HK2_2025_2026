@@ -1,10 +1,24 @@
 package srpm.dto.request;
 
+import jakarta.validation.constraints.*;
+
 public class RegisterRequest {
+    @NotBlank(message = "Username không được để trống")
+    @Size(min = 3, max = 50, message = "Username phải từ 3-50 ký tự")
     private String username;
+
+    @NotBlank(message = "Password không được để trống")
+    @Size(min = 6, message = "Password phải tối thiểu 6 ký tự")
     private String password;
+
+    @NotBlank(message = "Email không được để trống")
+    @Email(message = "Email không hợp lệ")
     private String email;
+
+    @NotBlank(message = "Role không được để trống")
+    @Pattern(regexp = "ADMIN|LECTURER|STUDENT", message = "Role phải là ADMIN, LECTURER hoặc STUDENT")
     private String role;
+
     private String businessId;
 
     public RegisterRequest() {}

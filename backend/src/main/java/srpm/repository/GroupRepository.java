@@ -1,35 +1,40 @@
 package srpm.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import srpm.model.Group;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface GroupRepository extends JpaRepository<Group, Long> {
+/**
+ * Repository wrapper contract for {@link Group}.
+ * <p>
+ * This layer wraps DAO access and is the default dependency for services.
+ */
+public interface GroupRepository {
 
-    @Query("SELECT DISTINCT g FROM Group g LEFT JOIN FETCH g.groupMembers gm LEFT JOIN FETCH gm.student LEFT JOIN FETCH g.lecturer")
-    List<Group> findAllWithStudentsAndLecturer();
+	Optional<Group> findById(Long id);
 
-    @Query("SELECT g FROM Group g LEFT JOIN FETCH g.groupMembers gm LEFT JOIN FETCH gm.student LEFT JOIN FETCH g.lecturer WHERE g.id = ?1")
-    Optional<Group> findByIdWithStudentsAndLecturer(Long id);
+	Optional<Group> findByIdWithStudentsAndLecturer(Long id);
 
-    boolean existsByGroupCode(String groupCode);
+	List<Group> findAllWithStudentsAndLecturer();
 
-    boolean existsByGroupName(String groupName);
+	List<Group> findByLecturerId(Long lecturerId);
 
-    boolean existsByGroupCodeAndIdNot(String groupCode, Long id);
+	boolean existsById(Long id);
 
-    boolean existsByGroupNameAndIdNot(String groupName, Long id);
+	boolean existsByGroupCode(String groupCode);
 
-    @Query("SELECT CASE WHEN COUNT(g) > 0 THEN true ELSE false END FROM Group g WHERE g.jiraUrl = :jiraUrl AND g.jiraProjectKey = :projectKey")
-    boolean existsByJiraUrlAndProjectKey(@Param("jiraUrl") String jiraUrl, @Param("projectKey") String projectKey);
+	boolean existsByGroupName(String groupName);
 
-    @Query("SELECT CASE WHEN COUNT(g) > 0 THEN true ELSE false END FROM Group g WHERE g.jiraUrl = :jiraUrl AND g.jiraProjectKey = :projectKey AND g.id != :id")
-    boolean existsByJiraUrlAndProjectKeyAndIdNot(@Param("jiraUrl") String jiraUrl, @Param("projectKey") String projectKey, @Param("id") Long id);
+	boolean existsByGroupCodeAndIdNot(String groupCode, Long id);
 
-    @Query("SELECT DISTINCT g FROM Group g LEFT JOIN FETCH g.groupMembers gm LEFT JOIN FETCH gm.student LEFT JOIN FETCH g.lecturer WHERE g.lecturer.id = :lecturerId")
-    List<Group> findByLecturerId(@Param("lecturerId") Long lecturerId);
+	boolean existsByGroupNameAndIdNot(String groupName, Long id);
+
+	boolean existsByJiraUrlAndProjectKey(String jiraUrl, String projectKey);
+
+	boolean existsByJiraUrlAndProjectKeyAndIdNot(String jiraUrl, String projectKey, Long id);
+
+	Group save(Group group);
+
+	void deleteById(Long id);
 }

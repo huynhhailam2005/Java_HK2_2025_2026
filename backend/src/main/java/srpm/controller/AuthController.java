@@ -1,5 +1,8 @@
 package srpm.controller;
 
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -8,9 +11,10 @@ import srpm.dto.request.LoginRequest;
 import srpm.dto.request.RegisterRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.dto.response.AuthResponse;
+import srpm.exception.ValidationException;
 import srpm.model.*;
 import srpm.security.JwtService;
-import srpm.service.UserService;
+import srpm.service.impl.UserService;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +23,7 @@ import java.util.UUID;
 @CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
     private final UserService userService;
     private final JwtService jwtService;
 
@@ -29,69 +34,66 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse> login(@RequestBody LoginRequest loginRequest) {
-        try {
-            System.out.println("[DEBUG] Login attempt: username=" + loginRequest.getUsername());
-            Optional<User> userOpt = userService.login(loginRequest.getUsername(), loginRequest.getPassword());
+    public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        logger.debug("Login attempt: username={}", loginRequest.getUsername());
 
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                System.out.println("[DEBUG] User found: " + user.getUsername() + ", role=" + user.getRole());
-                String token = jwtService.generateToken(user);
-                AuthResponse data = new AuthResponse(
-                        token,
-                        new AuthResponse.UserPayload(user.getID(), user.getUsername(), user.getEmail(), user.getRole())
-                );
+        Optional<User> userOpt = userService.login(loginRequest.getUsername(), loginRequest.getPassword());
 
-                return ResponseEntity.ok(new ApiResponse(true, "Đăng nhập thành công", data));
-            } else {
-                System.out.println("[DEBUG] User not found or password incorrect");
-                return ResponseEntity.status(401).body(new ApiResponse(false, "Sai tài khoản hoặc mật khẩu", null));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse(false, "Lỗi hệ thống: " + e.getMessage(), null));
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            logger.info("User login successful: username={}, role={}", user.getUsername(), user.getRole());
+            String token = jwtService.generateToken(user);
+            AuthResponse data = new AuthResponse(
+                    token,
+                    new AuthResponse.UserPayload(user.getID(), user.getUsername(), user.getEmail(), user.getRole())
+            );
+            return ResponseEntity.ok(new ApiResponse(true, "Đăng nhập thành công", data));
+        } else {
+            logger.warn("Login failed: username={}", loginRequest.getUsername());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse(false, "Sai tài khoản hoặc mật khẩu", null));
         }
     }
 
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse> register(@RequestBody RegisterRequest regRequest) {
+    public ResponseEntity<ApiResponse> register(@Valid @RequestBody RegisterRequest regRequest) {
+        logger.debug("Register attempt: username={}, email={}", regRequest.getUsername(), regRequest.getEmail());
+
         try {
-            if (regRequest.getUsername() == null || regRequest.getUsername().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse(false, "Username không được để trống", null));
-            }
-            if (regRequest.getEmail() == null || regRequest.getEmail().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse(false, "Email không được để trống", null));
-            }
-            if (regRequest.getPassword() == null || regRequest.getPassword().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse(false, "Password không được để trống", null));
+            String generatedCode = UUID.randomUUID().toString().substring(0, 20);
+
+            // Sử dụng UserFactory để tạo user object
+            User user = UserFactory.createUser(regRequest.getRole());
+            if (user == null) {
+                throw new ValidationException("Role không hợp lệ: " + regRequest.getRole());
             }
 
-            User user;
-            String businessCode = UUID.randomUUID().toString().substring(0, 20);
+            user.setUsername(regRequest.getUsername());
+            user.setPassword(regRequest.getPassword());
+            user.setEmail(regRequest.getEmail());
 
-            if ("ADMIN".equalsIgnoreCase(regRequest.getRole())) {
-                user = new Admin(regRequest.getUsername(), regRequest.getPassword(),
-                        regRequest.getEmail(), UserRole.ADMIN, businessCode);
-            } else if ("LECTURER".equalsIgnoreCase(regRequest.getRole())) {
-                user = new Lecturer(regRequest.getUsername(), regRequest.getPassword(),
-                        regRequest.getEmail(), UserRole.LECTURER, businessCode);
-            } else {
-                user = new Student(regRequest.getUsername(), regRequest.getPassword(),
-                        regRequest.getEmail(), UserRole.STUDENT, businessCode);
+            // Set role-specific code
+            if (user instanceof Admin) {
+                ((Admin) user).setAdminCode(generatedCode);
+            } else if (user instanceof Lecturer) {
+                ((Lecturer) user).setLecturerCode(generatedCode);
+            } else if (user instanceof Student) {
+                ((Student) user).setStudentCode(generatedCode);
             }
 
             userService.createUser(user);
+            logger.info("User registered successfully: username={}, role={}", user.getUsername(), user.getRole());
 
             return ResponseEntity.ok(new ApiResponse(true, "Đăng ký tài khoản thành công!", null));
 
-        } catch (IllegalArgumentException e) {
+        } catch (ValidationException e) {
+            logger.warn("Validation error during registration: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ApiResponse(false, e.getMessage(), null));
         } catch (Exception e) {
+            logger.error("Error during registration", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse(false, "Lỗi hệ thống: " + e.getMessage(), null));
+                    .body(new ApiResponse(false, "Lỗi hệ thống", null));
         }
     }
 }

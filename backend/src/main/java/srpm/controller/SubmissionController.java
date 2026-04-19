@@ -12,7 +12,7 @@ import srpm.model.Student;
 import srpm.model.User;
 import srpm.repository.GroupMemberRepository;
 import srpm.repository.UserRepository;
-import srpm.service.SubmissionService;
+import srpm.service.impl.SubmissionService;
 
 import java.util.Map;
 
@@ -22,18 +22,18 @@ import java.util.Map;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
-    private final UserRepository userRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final UserRepository userDao;
+    private final GroupMemberRepository groupMemberDao;
 
     @Autowired
     public SubmissionController(
             SubmissionService submissionService,
-            UserRepository userRepository,
-            GroupMemberRepository groupMemberRepository
+            UserRepository userDao,
+            GroupMemberRepository groupMemberDao
     ) {
         this.submissionService = submissionService;
-        this.userRepository = userRepository;
-        this.groupMemberRepository = groupMemberRepository;
+        this.userDao = userDao;
+        this.groupMemberDao = groupMemberDao;
     }
 
     /**
@@ -61,7 +61,7 @@ public class SubmissionController {
             }
 
             String username = authentication.getName();
-            var userOptional = userRepository.findByUsernameOrEmail(username, username);
+            var userOptional = userDao.findByUsernameOrEmail(username, username);
 
             if (userOptional.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
@@ -86,7 +86,7 @@ public class SubmissionController {
 
             // ========== Lấy GroupMember của student ==========
             // Giả sử student chỉ thuộc 1 group (hoặc lấy group từ context)
-            var groupMembers = groupMemberRepository.findByStudent(student.getID());
+            var groupMembers = groupMemberDao.findByStudent(student.getID());
             if (groupMembers.isEmpty()) {
                 return ResponseEntity.badRequest().body(new ApiResponse(
                         false,

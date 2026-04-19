@@ -14,15 +14,15 @@ import java.util.List;
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UserRepository userRepository;
+    private final UserRepository userDao;
 
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public CustomUserDetailsService(UserRepository userDao) {
+        this.userDao = userDao;
     }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsernameOrEmail(username, username)
+        User user = userDao.findByUsernameOrEmail(username, username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         List<GrantedAuthority> authorities = List.of(

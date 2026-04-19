@@ -1,8 +1,27 @@
 package srpm.model;
 
 public enum IssueStatus {
-    TODO,        // Chưa bắt đầu
-    IN_PROGRESS, // Đang thực hiện
-    DONE,   // Hoàn thành
-    CANCELLED    // Đã huỷ
+    TODO("TODO"),
+    IN_PROGRESS("IN_PROGRESS"),
+    DONE("DONE"),
+    CANCELLED("CANCELLED");
+
+    private final String value;
+
+    IssueStatus(String value) {
+        this.value = value;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public static IssueStatus fromValue(String value) {
+        for (IssueStatus status : IssueStatus.values()) {
+            if (status.value.equalsIgnoreCase(value)) {
+                return status;
+            }
+        }
+        throw new IllegalArgumentException("Invalid IssueStatus: " + value);
+    }
 }

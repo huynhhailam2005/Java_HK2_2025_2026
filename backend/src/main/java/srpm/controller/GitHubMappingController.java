@@ -9,7 +9,7 @@ import srpm.dto.response.ApiResponse;
 import srpm.dto.response.GitHubMemberMappingDto;
 import srpm.model.Group;
 import srpm.repository.GroupRepository;
-import srpm.service.GitHubService;
+import srpm.service.impl.GitHubService;
 import srpm.util.GitHubValidationUtil;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +22,7 @@ public class GitHubMappingController {
     private GitHubService gitHubService;
 
     @Autowired
-    private GroupRepository groupRepository;
+    private GroupRepository groupDao;
 
     /**
      * Lấy danh sách mapping các thành viên nhóm với GitHub
@@ -101,7 +101,7 @@ public class GitHubMappingController {
             }
 
             // Lấy repo info từ group
-            Group group = groupRepository.findById(groupId)
+            Group group = groupDao.findById(groupId)
                     .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
 
             String repoUrl = group.getGithubRepoUrl();

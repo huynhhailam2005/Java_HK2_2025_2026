@@ -1,8 +1,8 @@
 package srpm.model;
 
 public enum GroupMemberRole {
-    TEAM_MEMBER("member"),
-    TEAM_LEADER("leader");
+    TEAM_MEMBER("TEAM_MEMBER"),
+    TEAM_LEADER("TEAM_LEADER");
 
     private final String value;
 

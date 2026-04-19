@@ -4,7 +4,7 @@ public class UserFactory {
     public static User createUser(String roleStr) {
         if (roleStr == null) { return null; }
 
-        UserRole userRole = UserRole.valueOf(roleStr.toUpperCase());
+        UserRole userRole = UserRole.fromValue(roleStr);
 
         User user = switch (userRole) {
             case ADMIN -> new Admin();

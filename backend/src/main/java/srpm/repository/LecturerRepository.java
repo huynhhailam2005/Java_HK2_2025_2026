@@ -1,24 +1,28 @@
 package srpm.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import srpm.model.Lecturer;
+
 import java.util.Optional;
 
-public interface LecturerRepository extends JpaRepository<Lecturer, Long> {
-    @Query("SELECT l FROM Lecturer l WHERE l.id = :userId")
-    Optional<Lecturer> findByUserId(@Param("userId") Long userId);
+/**
+ * Repository wrapper contract for {@link Lecturer}.
+ */
+public interface LecturerRepository {
+	Optional<Lecturer> findById(Long id);
 
-    boolean existsByUsername(String username);
+	Optional<Lecturer> findByUserId(Long userId);
 
-    boolean existsByEmail(String email);
+	Lecturer save(Lecturer lecturer);
 
-    boolean existsByUsernameAndIdNot(String username, Long id);
+	boolean existsByUsername(String username);
 
-    boolean existsByEmailAndIdNot(String email, Long id);
+	boolean existsByEmail(String email);
 
-    boolean existsByLecturerCode(String lecturerCode);
+	boolean existsByUsernameAndIdNot(String username, Long id);
 
-    boolean existsByLecturerCodeAndIdNot(String lecturerCode, Long id);
+	boolean existsByEmailAndIdNot(String email, Long id);
+
+	boolean existsByLecturerCode(String lecturerCode);
+
+	boolean existsByLecturerCodeAndIdNot(String lecturerCode, Long id);
 }

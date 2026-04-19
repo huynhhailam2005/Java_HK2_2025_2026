@@ -1,13 +1,18 @@
 package srpm.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 import srpm.model.Submission;
 
 import java.util.List;
+import java.util.Optional;
 
-@Repository
-public interface SubmissionRepository extends JpaRepository<Submission, Long> {
-    List<Submission> findByIssueId(Long issueId);
+/**
+ * Repository wrapper contract for {@link Submission}.
+ */
+public interface SubmissionRepository {
+	Optional<Submission> findById(Long id);
+
+	Submission save(Submission submission);
+
+	List<Submission> findByIssueId(Long issueId);
 }
 

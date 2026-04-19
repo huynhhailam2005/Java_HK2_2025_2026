@@ -1,35 +1,34 @@
 package srpm.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import srpm.model.Group;
 import srpm.model.GroupMember;
 import srpm.model.GroupMemberRole;
 
+import java.util.List;
 import java.util.Optional;
 
-public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
+/**
+ * Repository wrapper contract for {@link GroupMember}.
+ */
+public interface GroupMemberRepository {
 
-    @Query("SELECT gm FROM GroupMember gm WHERE gm.group.id = :groupId AND gm.groupMemberRole = :role")
-    Optional<GroupMember> findByGroupAndRole(@Param("groupId") Long groupId, @Param("role") GroupMemberRole role);
+	Optional<GroupMember> findById(Long id);
 
-    @Query("SELECT gm FROM GroupMember gm WHERE gm.group.id = :groupId AND gm.student.id = :studentId")
-    Optional<GroupMember> findByGroupAndStudent(@Param("groupId") Long groupId, @Param("studentId") Long studentId);
+	GroupMember save(GroupMember member);
 
-    @Query("SELECT gm FROM GroupMember gm WHERE gm.group.id = :groupId AND gm.student.jiraAccountId = :jiraAccountId")
-    Optional<GroupMember> findByGroupAndJiraAccountId(@Param("groupId") Long groupId, @Param("jiraAccountId") String jiraAccountId);
+	void delete(GroupMember member);
 
-    @Query("SELECT CASE WHEN COUNT(gm) > 0 THEN true ELSE false END FROM GroupMember gm WHERE gm.group.id = :groupId AND gm.groupMemberRole = :role")
-    boolean existsByGroupAndRole(@Param("groupId") Long groupId, @Param("role") GroupMemberRole role);
+	Optional<GroupMember> findByGroupAndRole(Long groupId, GroupMemberRole role);
 
-    @Query("SELECT DISTINCT g FROM Group g LEFT JOIN FETCH g.groupMembers gm LEFT JOIN FETCH gm.student LEFT JOIN FETCH g.lecturer WHERE g.id IN (SELECT gm2.group.id FROM GroupMember gm2 WHERE gm2.student.id = :studentId)")
-    java.util.List<srpm.model.Group> findGroupsByStudentId(@Param("studentId") Long studentId);
+	Optional<GroupMember> findByGroupAndStudent(Long groupId, Long studentId);
 
-    // Lấy tất cả GroupMembers của một Student
-    @Query("SELECT gm FROM GroupMember gm WHERE gm.student.id = :studentId")
-    java.util.List<GroupMember> findByStudent(@Param("studentId") Long studentId);
+	Optional<GroupMember> findByGroupAndJiraAccountId(Long groupId, String jiraAccountId);
 
-    // Lấy tất cả GroupMembers của một Group
-    @Query("SELECT gm FROM GroupMember gm WHERE gm.group.id = :groupId")
-    java.util.List<GroupMember> findByGroup(@Param("groupId") Long groupId);
+	boolean existsByGroupAndRole(Long groupId, GroupMemberRole role);
+
+	List<Group> findGroupsByStudentId(Long studentId);
+
+	List<GroupMember> findByStudent(Long studentId);
+
+	List<GroupMember> findByGroup(Long groupId);
 }

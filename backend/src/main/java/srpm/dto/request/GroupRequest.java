@@ -1,11 +1,19 @@
 package srpm.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public class GroupRequest {
+    @NotBlank(message = "Group code không được để trống")
     private String groupCode;
+
+    @NotBlank(message = "Group name không được để trống")
     private String groupName;
+
+    @NotNull(message = "Lecturer ID không được để trống")
     private Long lecturerId;
+
     private List<Long> studentIds;
     private String jiraUrl;
     private String jiraProjectKey;
