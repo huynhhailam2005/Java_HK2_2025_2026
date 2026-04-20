@@ -6,7 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import srpm.dto.request.StudentManagementRequest;
+import srpm.dto.request.StudentRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.model.Student;
 import srpm.model.UserRole;
@@ -30,7 +30,7 @@ public class StudentController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse> createStudent(@RequestBody StudentManagementRequest request) {
+    public ResponseEntity<ApiResponse> createStudent(@RequestBody StudentRequest request) {
         try {
             validateRequest(request);
 
@@ -77,7 +77,7 @@ public class StudentController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateStudent(@PathVariable Long id, @RequestBody StudentManagementRequest request) {
+    public ResponseEntity<ApiResponse> updateStudent(@PathVariable Long id, @RequestBody StudentRequest request) {
         try {
             validateRequest(request);
 
@@ -128,7 +128,7 @@ public class StudentController {
         }
     }
 
-    private void validateRequest(StudentManagementRequest request) {
+    private void validateRequest(StudentRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
         }

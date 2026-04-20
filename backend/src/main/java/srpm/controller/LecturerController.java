@@ -6,7 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import srpm.dto.request.LecturerManagementRequest;
+import srpm.dto.request.LecturerRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.model.Lecturer;
 import srpm.model.UserRole;
@@ -30,7 +30,7 @@ public class LecturerController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse> createLecturer(@RequestBody LecturerManagementRequest request) {
+    public ResponseEntity<ApiResponse> createLecturer(@RequestBody LecturerRequest request) {
         try {
             validateRequest(request);
 
@@ -70,7 +70,7 @@ public class LecturerController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateLecturer(@PathVariable Long id, @RequestBody LecturerManagementRequest request) {
+    public ResponseEntity<ApiResponse> updateLecturer(@PathVariable Long id, @RequestBody LecturerRequest request) {
         try {
             validateRequest(request);
 
@@ -114,7 +114,7 @@ public class LecturerController {
         }
     }
 
-    private void validateRequest(LecturerManagementRequest request) {
+    private void validateRequest(LecturerRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
         }
