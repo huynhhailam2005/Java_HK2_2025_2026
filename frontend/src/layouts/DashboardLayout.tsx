@@ -10,12 +10,12 @@ import {
     LogOut,
     Bell,
     Search,
-    Menu
+    Menu,
+    BarChart3 // 🔥 Import thêm icon BarChart3
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { AUTH_TOKEN_KEY } from '../services/authApi';
 
-//Tạo khuôn đúc dữ liệu, cấm dùng 'any'
 interface UserData {
     username: string;
     role: string;
@@ -26,7 +26,6 @@ export default function DashboardLayout() {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // 🛠️ ĐÃ FIX LỖI 2: Đọc localStorage ngay lúc khởi tạo (Lazy Init) để không bị lỗi Cascading Renders
     const [currentUser] = useState<UserData | null>(() => {
         const userDataStr = localStorage.getItem('user');
         if (!userDataStr) {
@@ -39,7 +38,6 @@ export default function DashboardLayout() {
                 return { username: parsed.username, role: parsed.role };
             }
         } catch {
-            // Clear corrupted auth cache to avoid rendering crash loops.
             localStorage.removeItem('user');
             localStorage.removeItem(AUTH_TOKEN_KEY);
         }
@@ -47,7 +45,6 @@ export default function DashboardLayout() {
         return null;
     });
 
-    //Rút gọn useEffect: Bây giờ nó chỉ làm đúng 1 việc là đuổi cổ mấy đứa chưa đăng nhập
     useEffect(() => {
         if (!currentUser) {
             navigate('/');
@@ -55,16 +52,15 @@ export default function DashboardLayout() {
     }, [currentUser, navigate]);
 
     const handleLogout = () => {
-        // 1. Xóa dữ liệu user khỏi kho
         localStorage.removeItem('user');
         localStorage.removeItem(AUTH_TOKEN_KEY);
-        // 2. Điều hướng về trang Login
         navigate('/');
     };
 
-    // 1. Khai báo 3 bộ Menu
+    // 🔥 CẬP NHẬT MENU: Thêm "Báo cáo Tiến độ" cho cả SV và GV
     const studentMenu = [
         { title: 'Tổng quan Sinh viên', icon: <LayoutDashboard size={20} />, path: '/dashboard/student' },
+        { title: 'Báo cáo Tiến độ', icon: <BarChart3 size={20} />, path: '/dashboard/report' },
         { title: 'Dự án của tôi', icon: <FolderKanban size={20} />, path: '/projects' },
         { title: 'Bảng công việc', icon: <CheckSquare size={20} />, path: '/tasks' },
         { title: 'Tài nguyên', icon: <Github size={20} />, path: '/resources' },
@@ -74,6 +70,7 @@ export default function DashboardLayout() {
     const lecturerMenu = [
         { title: 'Tổng quan Giảng viên', icon: <LayoutDashboard size={20} />, path: '/dashboard/lecturer' },
         { title: 'Quản lý Lớp & Đồ án', icon: <FolderKanban size={20} />, path: '/manage-projects' },
+        { title: 'Báo cáo Tiến độ', icon: <BarChart3 size={20} />, path: '/dashboard/report' },
         { title: 'Chấm điểm', icon: <CheckSquare size={20} />, path: '/grading' },
         { title: 'Danh sách Sinh viên', icon: <Users size={20} />, path: '/students-list' },
     ];
@@ -84,7 +81,6 @@ export default function DashboardLayout() {
         { title: 'Cài đặt Hệ thống', icon: <Settings size={20} />, path: '/system-settings' },
     ];
 
-    // 2. Logic chọn Menu tự động
     let currentMenuItems = studentMenu;
 
     if (currentUser?.role === 'LECTURER') {
@@ -94,13 +90,8 @@ export default function DashboardLayout() {
     }
 
     return (
-        // Nền tổng của toàn bộ App (Dark mode)
         <div className="min-h-screen bg-[#050B20] text-white font-sans overflow-hidden flex flex-col">
-
-            {/* 1. TOP HEADER - Trải dài 100% */}
             <header className="h-16 w-full border-b border-white/10 bg-white/5 backdrop-blur-md flex items-center justify-between px-6 z-50 shrink-0">
-
-                {/* Logo & Toggle Button */}
                 <div className="flex items-center gap-4 w-64">
                     <button
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -111,7 +102,6 @@ export default function DashboardLayout() {
                     <div className="font-bold text-xl tracking-wider text-blue-400">SRPM<span className="text-white"></span></div>
                 </div>
 
-                {/* Search Bar */}
                 <div className="flex-1 max-w-xl hidden md:flex items-center px-4 py-2 bg-white/5 border border-white/10 rounded-full focus-within:border-blue-500/50 transition">
                     <Search size={18} className="text-gray-400 mr-3" />
                     <input
@@ -121,30 +111,25 @@ export default function DashboardLayout() {
                     />
                 </div>
 
-                {/* User Actions */}
                 <div className="flex items-center gap-4">
                     <button className="relative p-2 hover:bg-white/10 rounded-full transition">
                         <Bell size={20} />
                         <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                     </button>
 
-                    {/* Hiện tên và Role của User */}
                     <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                         <div className="hidden md:flex flex-col items-end">
                             <span className="text-sm font-semibold text-white">{currentUser?.username || 'Đang tải...'}</span>
                             <span className="text-xs text-blue-400 font-medium">{currentUser?.role || 'User'}</span>
                         </div>
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 border border-white/20 cursor-pointer flex items-center justify-center font-bold shadow-lg text-sm">
+                        <div className="h-9 w-9 rounded-full bg-linear-to-tr from-blue-500 to-purple-500 border border-white/20 cursor-pointer flex items-center justify-center font-bold shadow-lg text-sm">
                             {currentUser?.username?.charAt(0).toUpperCase() || 'U'}
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* 2. BODY KHU VỰC BÊN DƯỚI HEADER */}
             <div className="flex flex-1 overflow-hidden p-4 gap-4">
-
-                {/* SIDEBAR FLOATING */}
                 <aside
                     className={`
             ${isSidebarOpen ? 'w-64' : 'w-0 opacity-0 overflow-hidden'} 
@@ -166,7 +151,6 @@ export default function DashboardLayout() {
                                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
                                     }`}
                                 >
-                                    {/* HIỆU ỨNG MORPH LƯỚT CHUỘT */}
                                     {isActive && (
                                         <motion.div
                                             layoutId="active-sidebar-tab"
@@ -203,13 +187,11 @@ export default function DashboardLayout() {
                     </div>
                 </aside>
 
-                {/* 3. MAIN CONTENT */}
                 <main className="flex-1 flex flex-col items-center bg-white/5 border border-white/10 rounded-2xl overflow-y-auto relative backdrop-blur-sm shadow-xl p-6 md:p-10">
                     <div className="max-w-7xl w-full mx-auto flex flex-col flex-1">
                         <Outlet />
                     </div>
                 </main>
-
             </div>
         </div>
     );

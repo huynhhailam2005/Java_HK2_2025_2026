@@ -1,73 +1,58 @@
-import { Users, BookOpen, CheckCircle, Clock, ChevronRight } from 'lucide-react';
-// 🛠️ Import khuôn StatCard
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Users, Clock, CheckCircle } from 'lucide-react';
 import StatCard from '../components/common/StatCard';
+import { adminApi } from '../services/adminApi';
 
-export default function LecturerDashboard() {
+interface ApiGroupDto {
+    id: number;
+    lecturer?: { id: number };
+}
+
+const LecturerDashboard = () => {
+    const [user, setUser] = useState<{ id?: number; username?: string } | null>(null);
+    const [stats, setStats] = useState({ totalGroups: 0, pendingReviews: 3, activeIssues: 12 });
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+
+            // Lấy tổng số nhóm mà giảng viên này quản lý
+            adminApi.getGroups()
+                .then(res => {
+                    const allGroups = res.data.data as unknown as ApiGroupDto[];
+                    const myGroups = allGroups.filter(g => g.lecturer?.id === parsedUser.id);
+                    setStats(prev => ({ ...prev, totalGroups: myGroups.length }));
+                })
+                .catch(console.error);
+        }
+    }, []);
+
     return (
-        <div className="w-full">
-            <h1 className="text-3xl font-bold text-white mb-2">Tổng quan Giảng viên</h1>
-            <p className="text-slate-400 mb-8">Theo dõi tiến độ đồ án và quản lý sinh viên của bạn.</p>
-
-            {/* Khối Thẻ Thống Kê - Rút gọn siêu mượt */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-                <StatCard
-                    title="Lớp/Đồ án đang phụ trách"
-                    value="4"
-                    icon={<BookOpen size={24} />}
-                    colorClass="bg-blue-500/20 text-blue-400"
-                />
-                <StatCard
-                    title="Tổng số Nhóm"
-                    value="24"
-                    icon={<Users size={24} />}
-                    colorClass="bg-purple-500/20 text-purple-400"
-                />
-                <StatCard
-                    title="Bài nộp chờ chấm"
-                    value="12"
-                    icon={<Clock size={24} />}
-                    colorClass="bg-orange-500/20 text-orange-400"
-                />
-                <StatCard
-                    title="Đã hoàn thành đánh giá"
-                    value="85%"
-                    icon={<CheckCircle size={24} />}
-                    colorClass="bg-green-500/20 text-green-400"
-                />
+        <div className="space-y-8">
+            <div>
+                <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                    <LayoutDashboard className="text-purple-500" /> Tổng Quan Giảng Viên
+                </h1>
+                <p className="text-slate-400 mt-2">Xin chào, <span className="text-purple-400 font-bold">{user?.username}</span>! Chúc bạn một ngày làm việc hiệu quả.</p>
             </div>
 
-            {/* Danh sách công việc cần làm ngay */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-lg">
-                <h2 className="text-xl font-bold text-white mb-4">Báo cáo gần đây cần duyệt</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard title="Tổng nhóm hướng dẫn" value={stats.totalGroups.toString()} icon={<Users />} colorClass="from-purple-500 to-pink-500" />
+                <StatCard title="Báo cáo chờ duyệt" value={stats.pendingReviews.toString()} icon={<Clock />} colorClass="from-amber-500 to-orange-500" />
+                <StatCard title="Task đang chạy" value={stats.activeIssues.toString()} icon={<CheckCircle />} colorClass="from-blue-500 to-cyan-400" />
+            </div>
 
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
-                        <div className="flex items-center gap-4">
-                            <div className="w-2 h-2 rounded-full bg-orange-400"></div>
-                            <div>
-                                <h3 className="text-white font-medium">Nhóm 01 - Hệ thống quản lý thư viện</h3>
-                                <p className="text-sm text-slate-400">Nộp báo cáo Sprint 2 • 2 giờ trước</p>
-                            </div>
-                        </div>
-                        <button className="text-blue-400 p-2 rounded-lg group-hover:bg-blue-500/20 transition-colors">
-                            <ChevronRight size={20} />
-                        </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
-                        <div className="flex items-center gap-4">
-                            <div className="w-2 h-2 rounded-full bg-orange-400"></div>
-                            <div>
-                                <h3 className="text-white font-medium">Nhóm 05 - App bán hàng đồ thể thao</h3>
-                                <p className="text-sm text-slate-400">Nộp tài liệu thiết kế Database • 5 giờ trước</p>
-                            </div>
-                        </div>
-                        <button className="text-blue-400 p-2 rounded-lg group-hover:bg-blue-500/20 transition-colors">
-                            <ChevronRight size={20} />
-                        </button>
-                    </div>
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-white mb-4">Hoạt động gần đây</h2>
+                <div className="bg-black/20 rounded-2xl p-8 border border-white/5 flex flex-col items-center justify-center text-slate-500">
+                    <Clock className="w-12 h-12 mb-3 opacity-20" />
+                    <p>Chưa có hoạt động nào nổi bật trong ngày hôm nay.</p>
                 </div>
             </div>
         </div>
     );
-}
+};
+
+export default LecturerDashboard;
