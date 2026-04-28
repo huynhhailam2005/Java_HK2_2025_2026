@@ -1,0 +1,9 @@
+$kind: collection
+name: SRPM API
+variables:
+  - key: token
+    value: ''
+  - key: userId
+    value: ''
+  - key: groupId
+    value: ''
