@@ -40,8 +40,6 @@ const LecturerDashboard = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <StatCard title="Tổng nhóm hướng dẫn" value={stats.totalGroups.toString()} icon={<Users />} colorClass="from-purple-500 to-pink-500" />
-                <StatCard title="Báo cáo chờ duyệt" value={stats.pendingReviews.toString()} icon={<Clock />} colorClass="from-amber-500 to-orange-500" />
-                <StatCard title="Task đang chạy" value={stats.activeIssues.toString()} icon={<CheckCircle />} colorClass="from-blue-500 to-cyan-400" />
             </div>
 
             <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
