@@ -12,12 +12,12 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import srpm.dto.response.GitHubMemberMappingDto;
+import srpm.dto.GitHubMemberMappingDto;
 import srpm.model.Group;
 import srpm.model.GroupMember;
 import srpm.model.Student;
-import srpm.repository.GroupMemberRepository;
-import srpm.repository.GroupRepository;
+import srpm.repository.IGroupMemberRepository;
+import srpm.repository.IGroupRepository;
 import srpm.service.IGitHubService;
 import srpm.util.GitHubValidationUtil;
 import java.util.*;
@@ -30,29 +30,23 @@ public class GitHubService implements IGitHubService {
     private static final Logger logger = LoggerFactory.getLogger(GitHubService.class);
 
     @Autowired
-    private GroupRepository groupDao;
+    private IGroupRepository groupDao;
 
     @Autowired
-    private GroupMemberRepository groupMemberDao;
+    private IGroupMemberRepository groupMemberDao;
 
     @Autowired
     private RestTemplate restTemplate;
 
     @Autowired
-    private GitHubCollaboratorsCache collaboratorsCache;
+    private GitHubCollaboratorsCacheService collaboratorsCache;
 
     private static final String GITHUB_API_BASE = "https://api.github.com";
 
-    /**
-     * Lấy danh sách các thành viên nhóm và mapping với GitHub
-     * @param groupId ID của nhóm
-     * @return Danh sách thành viên với thông tin mapping GitHub
-     */
     public List<GitHubMemberMappingDto> getGroupMemberMappings(Long groupId) {
         Group group = groupDao.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
 
-        // Lấy repository URL và token
         String repoUrl = group.getGithubRepoUrl();
         String accessToken = group.getGithubAccessToken();
 
@@ -60,34 +54,22 @@ public class GitHubService implements IGitHubService {
             throw new RuntimeException("Nhóm chưa cấu hình GitHub repository URL");
         }
 
-        // Extract owner/repo từ URL
         String[] repoParts = extractRepoOwnerAndName(repoUrl);
         String owner = repoParts[0];
         String repo = repoParts[1];
 
-        // Lấy danh sách collaborators từ GitHub
         Map<String, String> githubCollaborators = fetchGitHubCollaborators(owner, repo, accessToken);
 
-        // Lấy danh sách thành viên nhóm
         List<GroupMember> groupMembers = groupMemberDao.findByGroup(groupId);
 
-        // Map thành viên với GitHub info
         return groupMembers.stream()
                 .map(member -> mapMemberToGitHub(member, group, githubCollaborators))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Lấy danh sách collaborators từ GitHub
-     * @param owner Owner của repository
-     * @param repo Repository name
-     * @param accessToken GitHub access token
-     * @return Map of GitHub username -> permissions
-     */
     private Map<String, String> fetchGitHubCollaborators(String owner, String repo, String accessToken) {
         String cacheKey = owner + "/" + repo;
-        
-        // Kiểm tra cache trước
+
         Map<String, String> cachedCollaborators = collaboratorsCache.get(cacheKey);
         if (cachedCollaborators != null) {
             logger.debug("Collaborators từ cache cho {}: {}", cacheKey, cachedCollaborators.keySet());
@@ -136,7 +118,6 @@ public class GitHubService implements IGitHubService {
 
             logger.info("Danh sách collaborators cuối cùng: {}", collaborators.keySet());
 
-            // Lưu vào cache
             collaboratorsCache.put(cacheKey, collaborators);
         } catch (RestClientException e) {
             logger.error("Lỗi khi lấy collaborators từ GitHub", e);
@@ -146,13 +127,11 @@ public class GitHubService implements IGitHubService {
         return collaborators;
     }
 
-    // Map thành viên nhóm với thông tin GitHub
     private GitHubMemberMappingDto mapMemberToGitHub(GroupMember member, Group group,
                                                        Map<String, String> githubCollaborators) {
         Student student = member.getStudent();
         String githubUsername = student.getGithubUsername();
 
-        // Trim whitespace from GitHub username
         if (githubUsername != null) {
             githubUsername = githubUsername.trim();
             student.setGithubUsername(githubUsername);
@@ -190,7 +169,6 @@ public class GitHubService implements IGitHubService {
         );
     }
 
-    // Xác định trạng thái mapping
     private String getMappingStatus(String githubUsername, boolean isCollaborator,
                                     Map<String, String> collaborators) {
         if (githubUsername == null || githubUsername.isEmpty()) {
@@ -203,7 +181,6 @@ public class GitHubService implements IGitHubService {
 
         String roleName = collaborators.get(githubUsername.toLowerCase());
 
-        // Map GitHub role names to permission levels
         if (roleName != null) {
             switch(roleName.toLowerCase()) {
                 case "admin":
@@ -224,9 +201,6 @@ public class GitHubService implements IGitHubService {
         return "MAPPED_BUT_NOT_COLLABORATOR";
     }
 
-    /**
-     * Lấy thông tin một thành viên và mapping GitHub
-     */
     public GitHubMemberMappingDto getMemberMapping(Long groupId, Long memberId) {
         GroupMember member = groupMemberDao.findById(memberId)
                 .orElseThrow(() -> new RuntimeException("Thành viên không tồn tại"));
@@ -251,66 +225,10 @@ public class GitHubService implements IGitHubService {
         return mapMemberToGitHub(member, group, collaborators);
     }
 
-    // Thêm GitHub username cho thành viên nhóm
-    public GitHubMemberMappingDto addGitHubUsername(Long groupId, Long memberId, String githubUsername) {
-        GroupMember member = groupMemberDao.findById(memberId)
-                .orElseThrow(() -> new RuntimeException("Thành viên không tồn tại"));
-
-        Group group = groupDao.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
-
-        if (!member.getGroup().getId().equals(groupId)) {
-            throw new RuntimeException("Thành viên không thuộc nhóm này");
-        }
-
-        // Validate GitHub username
-        if (githubUsername == null || githubUsername.trim().isEmpty()) {
-            throw new RuntimeException("GitHub username không được để trống");
-        }
-
-        if (!GitHubValidationUtil.isValidUsername(githubUsername)) {
-            throw new RuntimeException("GitHub username không hợp lệ. " +
-                    "Username chỉ được chứa ký tự alphanumeric và dashes, độ dài 1-39 ký tự");
-        }
-
-        Student student = member.getStudent();
-        student.setGithubUsername(GitHubValidationUtil.normalizeUsername(githubUsername));
-
-        // Map member với GitHub
-        String repoUrl = group.getGithubRepoUrl();
-        String accessToken = group.getGithubAccessToken();
-
-        if (repoUrl != null && !repoUrl.isEmpty() && accessToken != null && !accessToken.isEmpty()) {
-            String[] repoParts = extractRepoOwnerAndName(repoUrl);
-            Map<String, String> collaborators = fetchGitHubCollaborators(repoParts[0], repoParts[1], accessToken);
-            return mapMemberToGitHub(member, group, collaborators);
-        }
-
-        return mapMemberToGitHub(member, group, new HashMap<>());
-    }
-
-    // Xóa GitHub username của thành viên
-    public void removeGitHubUsername(Long groupId, Long memberId) {
-        GroupMember member = groupMemberDao.findById(memberId)
-                .orElseThrow(() -> new RuntimeException("Thành viên không tồn tại"));
-
-        Group group = groupDao.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
-
-        if (!member.getGroup().getId().equals(groupId)) {
-            throw new RuntimeException("Thành viên không thuộc nhóm này");
-        }
-
-        Student student = member.getStudent();
-        student.setGithubUsername(null);
-    }
-
-    // Lấy thống kê commits của một user trên repo
     public Map<String, Object> getCommitStats(String owner, String repo, String author, String accessToken) {
         Map<String, Object> stats = new HashMap<>();
 
         try {
-            // Lấy danh sách commits của author
             String url = String.format("%s/repos/%s/%s/commits?author=%s&per_page=100",
                     GITHUB_API_BASE, owner, repo, author);
             logger.info("Fetching commits from: {}", url);
@@ -335,9 +253,14 @@ public class GitHubService implements IGitHubService {
                 stats.put("totalCommits", commits.size());
                 stats.put("commits", commits);
 
-                // Extract last commit info
                 Map<String, Object> lastCommit = commits.get(0);
-                stats.put("lastCommitDate", lastCommit.get("commit"));
+                Map<String, Object> lastCommitInfo = (Map<String, Object>) lastCommit.get("commit");
+                if (lastCommitInfo != null) {
+                    Map<String, Object> lastAuthorInfo = (Map<String, Object>) lastCommitInfo.get("author");
+                    if (lastAuthorInfo != null && lastAuthorInfo.get("date") != null) {
+                        stats.put("lastCommitDate", lastAuthorInfo.get("date").toString());
+                    }
+                }
                 stats.put("lastCommitUrl", lastCommit.get("html_url"));
 
                 logger.info("Found {} commits for author {} on {}/{}",
@@ -361,11 +284,6 @@ public class GitHubService implements IGitHubService {
         return stats;
     }
 
-    /**
-     * Lấy thống kê commits của tất cả thành viên trong nhóm
-     * @param groupId ID của nhóm
-     * @return Team commit summary
-     */
     public Map<String, Object> getTeamCommitsSummary(Long groupId) {
         Map<String, Object> summary = new HashMap<>();
         
@@ -383,8 +301,7 @@ public class GitHubService implements IGitHubService {
             String[] repoParts = extractRepoOwnerAndName(repoUrl);
             String owner = repoParts[0];
             String repo = repoParts[1];
-            
-            // Lấy danh sách members
+
             List<GroupMember> members = groupMemberDao.findByGroup(groupId);
 
             List<Map<String, Object>> memberStats = new ArrayList<>();
@@ -418,8 +335,7 @@ public class GitHubService implements IGitHubService {
                     logger.warn("Error getting commits for {}: {}", githubUsername, e.getMessage());
                 }
             }
-            
-            // Sort by commits descending
+
             memberStats.sort((a, b) -> {
                 Integer aCommits = (Integer) a.getOrDefault("totalCommits", 0);
                 Integer bCommits = (Integer) b.getOrDefault("totalCommits", 0);
@@ -448,26 +364,136 @@ public class GitHubService implements IGitHubService {
          return summary;
     }
 
-    // Helper method: Extract owner và repo name từ GitHub URL
-    private String[] extractRepoOwnerAndName(String repoUrl) {
+    public Map<String, Object> getTeamCommitHistory(Long groupId, Integer days) {
+        Map<String, Object> history = new HashMap<>();
+
         try {
-            return GitHubValidationUtil.extractOwnerAndRepo(repoUrl);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Invalid GitHub repository URL format: " + repoUrl);
+            Group group = groupDao.findById(groupId)
+                    .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
+
+            String repoUrl = group.getGithubRepoUrl();
+            String accessToken = group.getGithubAccessToken();
+
+            if (repoUrl == null || repoUrl.isEmpty() || accessToken == null || accessToken.isEmpty()) {
+                throw new RuntimeException("Nhóm chưa cấu hình GitHub");
+            }
+
+            String[] repoParts = extractRepoOwnerAndName(repoUrl);
+            String owner = repoParts[0];
+            String repo = repoParts[1];
+
+            if (days == null || days <= 0) {
+                days = 30;
+            }
+
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.DAY_OF_MONTH, -days);
+            Date since = cal.getTime();
+
+            List<GroupMember> members = groupMemberDao.findByGroup(groupId);
+
+            Map<String, Map<String, Object>> dailyStats = new TreeMap<>(Collections.reverseOrder());
+            Map<String, Integer> memberCommitCounts = new HashMap<>();
+            int totalCommits = 0;
+
+            for (GroupMember member : members) {
+                Student student = member.getStudent();
+                String githubUsername = student.getGithubUsername();
+
+                if (githubUsername == null || githubUsername.isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    List<Map<String, Object>> memberCommits = getCommitsInDateRange(owner, repo, githubUsername, accessToken, since);
+
+                    for (Map<String, Object> commit : memberCommits) {
+                        try {
+                            Map<String, Object> commitInfo = (Map<String, Object>) commit.get("commit");
+                            if (commitInfo != null) {
+                                Map<String, Object> author = (Map<String, Object>) commitInfo.get("author");
+                                if (author != null && author.get("date") != null) {
+                                    String dateStr = author.get("date").toString();
+                                    Date commitDate = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").parse(dateStr);
+
+                                    String dateKey = new java.text.SimpleDateFormat("yyyy-MM-dd").format(commitDate);
+
+                                    dailyStats.computeIfAbsent(dateKey, k -> {
+                                        Map<String, Object> dayStat = new HashMap<>();
+                                        dayStat.put("date", dateKey);
+                                        dayStat.put("totalCommits", 0);
+                                        dayStat.put("commits", new ArrayList<Map<String, Object>>());
+                                        dayStat.put("contributors", new HashMap<String, Integer>());
+                                        return dayStat;
+                                    });
+
+                                    Map<String, Object> dayStat = dailyStats.get(dateKey);
+                                    dayStat.put("totalCommits", (Integer) dayStat.get("totalCommits") + 1);
+
+                                    List<Map<String, Object>> dayCommits = (List<Map<String, Object>>) dayStat.get("commits");
+                                    Map<String, Object> commitSummary = new HashMap<>();
+                                    commitSummary.put("sha", commit.get("sha"));
+                                    Object rawMessage = commitInfo.get("message");
+                                    commitSummary.put("message", rawMessage != null ? rawMessage.toString() : "");
+                                    commitSummary.put("author", githubUsername);
+                                    commitSummary.put("date", dateStr);
+                                    commitSummary.put("url", commit.get("html_url"));
+                                    dayCommits.add(commitSummary);
+
+                                    Map<String, Integer> contributors = (Map<String, Integer>) dayStat.get("contributors");
+                                    contributors.put(githubUsername, contributors.getOrDefault(githubUsername, 0) + 1);
+
+                                    totalCommits++;
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.warn("Error parsing commit date: {}", e.getMessage());
+                        }
+                    }
+
+                    memberCommitCounts.put(githubUsername, memberCommits.size());
+
+                } catch (Exception e) {
+                    logger.warn("Error getting commits for {}: {}", githubUsername, e.getMessage());
+                }
+            }
+
+            List<Map<String, Object>> dailyStatsList = new ArrayList<>(dailyStats.values());
+            dailyStatsList.sort((a, b) -> ((String) b.get("date")).compareTo((String) a.get("date")));
+
+            history.put("groupId", groupId);
+            history.put("groupName", group.getGroupName());
+            history.put("repository", owner + "/" + repo);
+            history.put("days", days);
+            history.put("totalCommits", totalCommits);
+            history.put("dailyStats", dailyStatsList);
+            history.put("memberCommitCounts", memberCommitCounts);
+
+            logger.info("Commit history for group {}: {} commits over {} days",
+                    groupId, totalCommits, days);
+
+        } catch (Exception e) {
+            logger.error("Error getting team commit history: {}", e.getMessage());
+            history.put("error", e.getMessage());
         }
+
+        return history;
     }
 
-
-    // Debug: Lấy raw response từ GitHub API collaborators
-    public Map<String, Object> debugGetGitHubCollaborators(String owner, String repo, String accessToken) {
-        Map<String, Object> debugInfo = new HashMap<>();
+    private List<Map<String, Object>> getCommitsInDateRange(String owner, String repo, String author,
+                                                          String accessToken, Date since) {
+        List<Map<String, Object>> allCommits = new ArrayList<>();
 
         try {
-            String url = String.format("%s/repos/%s/%s/collaborators", GITHUB_API_BASE, owner, repo);
-            debugInfo.put("url", url);
+            String sinceStr = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(since);
+
+            String url = String.format("%s/repos/%s/%s/commits?author=%s&since=%s&per_page=100",
+                    GITHUB_API_BASE, owner, repo, author, sinceStr);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "Bearer " + accessToken);
+            if (accessToken != null && !accessToken.isEmpty()) {
+                headers.set("Authorization", "Bearer " + accessToken);
+            }
             headers.set("Accept", "application/vnd.github.v3+json");
             headers.set("User-Agent", "SRPM-App");
 
@@ -478,30 +504,25 @@ public class GitHubService implements IGitHubService {
                     entity,
                     new ParameterizedTypeReference<List<Map<String, Object>>>() {});
 
-            debugInfo.put("statusCode", response.getStatusCode().toString());
-            debugInfo.put("body", response.getBody());
-            debugInfo.put("headers", response.getHeaders());
-
-            List<Map<String, Object>> body = response.getBody();
-            if (body != null) {
-                List<Map<String, String>> collaboratorsList = new ArrayList<>();
-                for (Map<String, Object> collaborator : body) {
-                    Map<String, String> collab = new HashMap<>();
-                    collab.put("login", collaborator.getOrDefault("login", "").toString());
-                    collab.put("permission", collaborator.getOrDefault("permission", "").toString());
-                    collab.put("role_name", collaborator.getOrDefault("role_name", "").toString());
-                    collaboratorsList.add(collab);
-                }
-                debugInfo.put("collaborators", collaboratorsList);
+            List<Map<String, Object>> commits = response.getBody();
+            if (commits != null) {
+                allCommits.addAll(commits);
             }
 
-            logger.info("DEBUG GitHub Collaborators: {}", debugInfo);
-        } catch (Exception e) {
-            debugInfo.put("error", e.getMessage());
-            logger.error("DEBUG Error: {}", e.getMessage(), e);
+        } catch (RestClientException e) {
+            logger.error("Error fetching commits for {}: {}", author, e.getMessage());
         }
 
-        return debugInfo;
+        return allCommits;
     }
+
+    private String[] extractRepoOwnerAndName(String repoUrl) {
+        try {
+            return GitHubValidationUtil.extractOwnerAndRepo(repoUrl);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid GitHub repository URL format: " + repoUrl);
+        }
+    }
+
 }
 

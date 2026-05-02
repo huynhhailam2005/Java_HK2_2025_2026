@@ -79,10 +79,9 @@ CREATE TABLE issues (
     title VARCHAR(200) NOT NULL,
     description TEXT,
     deadline TIMESTAMP,
-    status VARCHAR(20) NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED')),
+    status VARCHAR(20) NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE')),
     issue_type VARCHAR(50) NOT NULL DEFAULT 'TASK' CHECK (issue_type IN ('TASK', 'BUG', 'STORY', 'SUB_TASK', 'EPIC')),
     sync_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (sync_status IN ('PENDING', 'SYNCED', 'ERROR')),
-    is_deleted BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_epic_no_parent CHECK (issue_type != 'EPIC' OR parent_id IS NULL),
     CONSTRAINT chk_subtask_has_parent CHECK (issue_type != 'SUB_TASK' OR parent_id IS NOT NULL)

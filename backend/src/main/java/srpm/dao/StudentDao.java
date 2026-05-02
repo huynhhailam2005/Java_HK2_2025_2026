@@ -19,6 +19,12 @@ public class StudentDao {
     return Optional.ofNullable(entityManager.find(Student.class, id));
   }
 
+  public List<Student> findAll() {
+    return entityManager
+        .createQuery("SELECT s FROM Student s ORDER BY s.studentCode", Student.class)
+        .getResultList();
+  }
+
   public Optional<Student> findByUserId(Long userId) {
     // Student PK = user_id
     return findById(userId);

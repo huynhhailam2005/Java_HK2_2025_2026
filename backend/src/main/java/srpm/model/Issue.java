@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import srpm.model.SyncStatus;
 
 @Entity
@@ -45,6 +46,7 @@ public class Issue {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     @Column(name = "deadline")
     private LocalDateTime deadline;
 
@@ -59,9 +61,6 @@ public class Issue {
     @Enumerated(EnumType.STRING)
     @Column(name = "sync_status", nullable = false, length = 20)
     private SyncStatus syncStatus = SyncStatus.PENDING;
-
-    @Column(name = "is_deleted", nullable = false)
-    private Boolean isDeleted = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -108,8 +107,6 @@ public class Issue {
     public IssueType getIssueType() { return issueType; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public SyncStatus getSyncStatus() { return syncStatus; }
-    public Boolean getIsDeleted() { return isDeleted; }
-
     public void setId(Long id) { this.id = id; }
     public void setIssueCode(String issueCode) { this.issueCode = issueCode; }
     public void setGroup(Group group) { this.group = group; }
@@ -122,6 +119,6 @@ public class Issue {
     public void setIssueType(IssueType issueType) { this.issueType = issueType; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public void setSyncStatus(SyncStatus syncStatus) { this.syncStatus = syncStatus; }
-    public void setIsDeleted(Boolean isDeleted) { this.isDeleted = isDeleted; }
+
 }
 

@@ -1,10 +1,8 @@
 import apiClient from './apiClient';
 import type { ApiResponse } from '../types/api';
 
-// Định nghĩa key lưu token
 export const AUTH_TOKEN_KEY = 'token';
 
-// Type chuẩn
 export interface LoginPayload {
     username?: string;
     password?: string;
@@ -19,13 +17,23 @@ export interface RegisterPayload {
     lecturerCode?: string;
 }
 
-// Hàm bắt lỗi
-export const getApiErrorMessage = (error: unknown): string => {
+export interface UserPayload {
+    id: number;
+    username: string;
+    email: string;
+    role: 'ADMIN' | 'LECTURER' | 'STUDENT';
+}
+
+export interface LoginResponseData {
+    user: UserPayload;
+    token: string;
+}
+
+export const getApiErrorMessage = (error: unknown, defaultMsg?: string): string => {
     const err = error as { response?: { data?: { message?: string } } };
-    return err.response?.data?.message || 'Đã có lỗi xảy ra từ hệ thống!';
+    return err.response?.data?.message || defaultMsg || 'Đã có lỗi xảy ra từ hệ thống!';
 };
 
-// 1. Export lẻ tẻ (để fix lỗi import { login })
 export const login = async (credentials: LoginPayload) => {
     const response = await apiClient.post<ApiResponse>('/api/auth/login', credentials);
     return response.data;
@@ -36,7 +44,6 @@ export const register = async (data: RegisterPayload) => {
     return response.data;
 };
 
-// 2. Export nguyên cục object (để ai gọi authApi.login vẫn chạy)
 export const authApi = {
     login,
     register

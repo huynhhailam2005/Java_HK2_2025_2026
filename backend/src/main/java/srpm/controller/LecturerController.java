@@ -4,13 +4,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import srpm.dto.request.LecturerRequest;
 import srpm.dto.response.ApiResponse;
-import srpm.model.Lecturer;
-import srpm.model.UserRole;
-import srpm.repository.LecturerRepository;
+import srpm.service.IAdminService;
 
 import java.util.NoSuchElementException;
 
@@ -20,46 +17,19 @@ import java.util.NoSuchElementException;
 @PreAuthorize("hasRole('ADMIN')")
 public class LecturerController {
 
-    private final LecturerRepository lecturerDao;
-    private final PasswordEncoder passwordEncoder;
+    private final IAdminService adminService;
 
     @Autowired
-    public LecturerController(LecturerRepository lecturerDao, PasswordEncoder passwordEncoder) {
-        this.lecturerDao = lecturerDao;
-        this.passwordEncoder = passwordEncoder;
+    public LecturerController(IAdminService adminService) {
+        this.adminService = adminService;
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse> createLecturer(@RequestBody LecturerRequest request) {
         try {
-            validateRequest(request);
-
-            if (lecturerDao.existsByUsername(request.getUsername().trim())) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Username đã tồn tại", null));
-            }
-            if (lecturerDao.existsByEmail(request.getEmail().trim())) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Email đã tồn tại", null));
-            }
-            if (lecturerDao.existsByLecturerCode(request.getLecturerCode().trim())) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Mã giảng viên đã tồn tại", null));
-            }
-
-            Lecturer lecturer = new Lecturer(
-                    request.getUsername().trim(),
-                    passwordEncoder.encode(request.getPassword().trim()),
-                    request.getEmail().trim(),
-                    UserRole.LECTURER,
-                    request.getLecturerCode().trim()
-            );
-
-            lecturerDao.save(lecturer);
-
+            adminService.createLecturer(request);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse(true, "Tạo giảng viên thành công", null));
-
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(new ApiResponse(false, e.getMessage(), null));
@@ -72,36 +42,8 @@ public class LecturerController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateLecturer(@PathVariable Long id, @RequestBody LecturerRequest request) {
         try {
-            validateRequest(request);
-
-            Lecturer lecturer = lecturerDao.findById(id)
-                    .orElseThrow(() -> new NoSuchElementException("Không tìm thấy giảng viên"));
-
-            if (lecturerDao.existsByUsernameAndIdNot(request.getUsername().trim(), id)) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Username đã tồn tại", null));
-            }
-
-            if (lecturerDao.existsByEmailAndIdNot(request.getEmail().trim(), id)) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Email đã tồn tại", null));
-            }
-
-            if (!lecturer.getLecturerCode().equals(request.getLecturerCode().trim()) &&
-                lecturerDao.existsByLecturerCode(request.getLecturerCode().trim())) {
-                return ResponseEntity.badRequest()
-                        .body(new ApiResponse(false, "Mã giảng viên đã tồn tại", null));
-            }
-
-            lecturer.setUsername(request.getUsername().trim());
-            lecturer.setPassword(passwordEncoder.encode(request.getPassword().trim()));
-            lecturer.setEmail(request.getEmail().trim());
-            lecturer.setLecturerCode(request.getLecturerCode().trim());
-
-            lecturerDao.save(lecturer);
-
+            adminService.updateLecturer(id, request);
             return ResponseEntity.ok(new ApiResponse(true, "Cập nhật thông tin giảng viên thành công", null));
-
         } catch (NoSuchElementException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiResponse(false, e.getMessage(), null));
@@ -111,24 +53,6 @@ public class LecturerController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new ApiResponse(false, "Lỗi hệ thống: " + e.getMessage(), null));
-        }
-    }
-
-    private void validateRequest(LecturerRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
-        }
-        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
-            throw new IllegalArgumentException("Username không được để trống");
-        }
-        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            throw new IllegalArgumentException("Password không được để trống");
-        }
-        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
-            throw new IllegalArgumentException("Email không được để trống");
-        }
-        if (request.getLecturerCode() == null || request.getLecturerCode().trim().isEmpty()) {
-            throw new IllegalArgumentException("Mã giảng viên không được để trống");
         }
     }
 }

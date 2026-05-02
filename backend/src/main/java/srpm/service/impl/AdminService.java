@@ -6,8 +6,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import srpm.dto.request.AdminRequest;
+import srpm.dto.request.LecturerRequest;
+import srpm.dto.request.StudentRequest;
+import srpm.dto.response.AdminResponse;
 import srpm.model.*;
-import srpm.repository.UserRepository;
+import srpm.repository.ILecturerRepository;
+import srpm.repository.IStudentRepository;
+import srpm.repository.IUserRepository;
 import srpm.service.IAdminService;
 
 import java.util.List;
@@ -18,17 +23,23 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AdminService implements IAdminService {
 
-    private final UserRepository userDao;
+    private final IUserRepository userDao;
+    private final IStudentRepository studentDao;
+    private final ILecturerRepository lecturerDao;
     private final PasswordEncoder passwordEncoder;
     private final List<UserRole> managedUserRoles;
 
     @Autowired
     public AdminService(
-            UserRepository userDao,
+            IUserRepository userDao,
+            IStudentRepository studentDao,
+            ILecturerRepository lecturerDao,
             PasswordEncoder passwordEncoder,
             @Value("${admin.user.managed-roles:LECTURER}") String managedRolesConfig
     ) {
         this.userDao = userDao;
+        this.studentDao = studentDao;
+        this.lecturerDao = lecturerDao;
         this.passwordEncoder = passwordEncoder;
         this.managedUserRoles = parseManagedRolesConfig(managedRolesConfig);
     }
@@ -53,7 +64,15 @@ public class AdminService implements IAdminService {
 
     @Transactional
     public User updateManagedUser(Long id, AdminRequest request) {
-        validateRequest(request);
+        if (request == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+            throw new IllegalArgumentException("Username không được để trống");
+        }
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("Email không được để trống");
+        }
 
         User existing = userDao.findByIdAndUserRoleIn(id, managedUserRoles).orElse(null);
         if (existing == null) {
@@ -67,10 +86,15 @@ public class AdminService implements IAdminService {
             throw new IllegalArgumentException("Email đã tồn tại");
         }
 
-        // Update existing user instead of creating new one
         existing.setUsername(request.getUsername().trim());
-        existing.setPassword(passwordEncoder.encode(request.getPassword().trim()));
         existing.setEmail(request.getEmail().trim());
+
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            if (request.getPassword().trim().length() < 6) {
+                throw new IllegalArgumentException("Password phải tối thiểu 6 ký tự");
+            }
+            existing.setPassword(passwordEncoder.encode(request.getPassword().trim()));
+        }
 
         return userDao.save(existing);
     }
@@ -103,27 +127,213 @@ public class AdminService implements IAdminService {
         return parsed;
     }
 
-    private void validateRequest(AdminRequest request) {
+    @Transactional
+    @Override
+    public User createStudent(StudentRequest request) {
+        validateStudentRequest(request, true);
+
+        if (studentDao.existsByUsername(request.getUsername().trim())) {
+            throw new IllegalArgumentException("Username đã tồn tại");
+        }
+        if (studentDao.existsByEmail(request.getEmail().trim())) {
+            throw new IllegalArgumentException("Email đã tồn tại");
+        }
+        if (studentDao.existsByStudentCode(request.getStudentCode().trim())) {
+            throw new IllegalArgumentException("Mã sinh viên đã tồn tại");
+        }
+
+        Student student = new Student(
+                request.getUsername().trim(),
+                passwordEncoder.encode(request.getPassword().trim()),
+                request.getEmail().trim(),
+                UserRole.STUDENT,
+                request.getStudentCode().trim()
+        );
+
+        if (request.getJiraAccountId() != null && !request.getJiraAccountId().trim().isEmpty()) {
+            student.setJiraAccountId(request.getJiraAccountId().trim());
+        }
+        if (request.getGithubUsername() != null && !request.getGithubUsername().trim().isEmpty()) {
+            student.setGithubUsername(request.getGithubUsername().trim());
+        }
+
+        return studentDao.save(student);
+    }
+
+    @Transactional
+    @Override
+    public User updateStudent(Long id, StudentRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        validateStudentRequest(request, false);
+
+        Student student = studentDao.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy sinh viên"));
+
+        if (studentDao.existsByUsernameAndIdNot(request.getUsername().trim(), id)) {
+            throw new IllegalArgumentException("Username đã tồn tại");
+        }
+        if (studentDao.existsByEmailAndIdNot(request.getEmail().trim(), id)) {
+            throw new IllegalArgumentException("Email đã tồn tại");
+        }
+        if (!student.getStudentCode().equals(request.getStudentCode().trim()) &&
+            studentDao.existsByStudentCode(request.getStudentCode().trim())) {
+            throw new IllegalArgumentException("Mã sinh viên đã tồn tại");
+        }
+
+        student.setUsername(request.getUsername().trim());
+        student.setEmail(request.getEmail().trim());
+        student.setStudentCode(request.getStudentCode().trim());
+
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            if (request.getPassword().trim().length() < 6) {
+                throw new IllegalArgumentException("Password phải tối thiểu 6 ký tự");
+            }
+            student.setPassword(passwordEncoder.encode(request.getPassword().trim()));
+        }
+
+        if (request.getJiraAccountId() != null && !request.getJiraAccountId().trim().isEmpty()) {
+            student.setJiraAccountId(request.getJiraAccountId().trim());
+        }
+        if (request.getGithubUsername() != null && !request.getGithubUsername().trim().isEmpty()) {
+            student.setGithubUsername(request.getGithubUsername().trim());
+        }
+
+        return studentDao.save(student);
+    }
+
+    @Transactional
+    @Override
+    public User createLecturer(LecturerRequest request) {
+        validateLecturerRequest(request, true);
+
+        if (lecturerDao.existsByUsername(request.getUsername().trim())) {
+            throw new IllegalArgumentException("Username đã tồn tại");
+        }
+        if (lecturerDao.existsByEmail(request.getEmail().trim())) {
+            throw new IllegalArgumentException("Email đã tồn tại");
+        }
+        if (lecturerDao.existsByLecturerCode(request.getLecturerCode().trim())) {
+            throw new IllegalArgumentException("Mã giảng viên đã tồn tại");
+        }
+
+        Lecturer lecturer = new Lecturer(
+                request.getUsername().trim(),
+                passwordEncoder.encode(request.getPassword().trim()),
+                request.getEmail().trim(),
+                UserRole.LECTURER,
+                request.getLecturerCode().trim()
+        );
+
+        return lecturerDao.save(lecturer);
+    }
+
+    @Transactional
+    @Override
+    public User updateLecturer(Long id, LecturerRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        validateLecturerRequest(request, false);
+
+        Lecturer lecturer = lecturerDao.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy giảng viên"));
+
+        if (lecturerDao.existsByUsernameAndIdNot(request.getUsername().trim(), id)) {
+            throw new IllegalArgumentException("Username đã tồn tại");
+        }
+        if (lecturerDao.existsByEmailAndIdNot(request.getEmail().trim(), id)) {
+            throw new IllegalArgumentException("Email đã tồn tại");
+        }
+        if (!lecturer.getLecturerCode().equals(request.getLecturerCode().trim()) &&
+            lecturerDao.existsByLecturerCode(request.getLecturerCode().trim())) {
+            throw new IllegalArgumentException("Mã giảng viên đã tồn tại");
+        }
+
+        lecturer.setUsername(request.getUsername().trim());
+        lecturer.setEmail(request.getEmail().trim());
+        lecturer.setLecturerCode(request.getLecturerCode().trim());
+
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            if (request.getPassword().trim().length() < 6) {
+                throw new IllegalArgumentException("Password phải tối thiểu 6 ký tự");
+            }
+            lecturer.setPassword(passwordEncoder.encode(request.getPassword().trim()));
+        }
+
+        return lecturerDao.save(lecturer);
+    }
+
+    private void validateStudentRequest(StudentRequest request, boolean requirePassword) {
         if (request == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
         }
         if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
             throw new IllegalArgumentException("Username không được để trống");
         }
-        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+        if (requirePassword && (request.getPassword() == null || request.getPassword().trim().isEmpty())) {
             throw new IllegalArgumentException("Password không được để trống");
         }
         if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
             throw new IllegalArgumentException("Email không được để trống");
         }
+        if (request.getStudentCode() == null || request.getStudentCode().trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã sinh viên không được để trống");
+        }
     }
 
-    // ...existing code...
+    private void validateLecturerRequest(LecturerRequest request, boolean requirePassword) {
+        if (request == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+            throw new IllegalArgumentException("Username không được để trống");
+        }
+        if (requirePassword && (request.getPassword() == null || request.getPassword().trim().isEmpty())) {
+            throw new IllegalArgumentException("Password không được để trống");
+        }
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("Email không được để trống");
+        }
+        if (request.getLecturerCode() == null || request.getLecturerCode().trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã giảng viên không được để trống");
+        }
+    }
 
     private String managedRolesText() {
         return managedUserRoles.stream()
                 .map(role -> role.name().toUpperCase())
                 .collect(Collectors.joining(", "));
+    }
+
+    @Override
+    public Object toAdminResponse(User user) {
+        String studentCode = null;
+        String lecturerCode = null;
+        String jiraAccountId = null;
+        String githubUsername = null;
+
+        if (user instanceof Student student) {
+            studentCode = student.getStudentCode();
+            jiraAccountId = student.getJiraAccountId();
+            githubUsername = student.getGithubUsername();
+        } else if (user instanceof Lecturer lecturer) {
+            lecturerCode = lecturer.getLecturerCode();
+        } else if (user instanceof Admin admin) {
+            lecturerCode = admin.getAdminCode();
+        }
+
+        return new AdminResponse(
+                user.getID(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole(),
+                studentCode,
+                lecturerCode,
+                githubUsername,
+                jiraAccountId
+        );
     }
 
     private List<UserRole> parseManagedRolesConfig(String managedRolesConfig) {

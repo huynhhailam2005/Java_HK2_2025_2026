@@ -12,11 +12,10 @@ import srpm.dto.request.RegisterRequest;
 import srpm.dto.response.ApiResponse;
 import srpm.dto.response.AuthResponse;
 import srpm.exception.ValidationException;
-import srpm.model.*;
+import srpm.model.User;
 import srpm.security.JwtService;
 import srpm.service.impl.UserService;
 import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -60,30 +59,8 @@ public class AuthController {
         logger.debug("Register attempt: username={}, email={}", regRequest.getUsername(), regRequest.getEmail());
 
         try {
-            String generatedCode = UUID.randomUUID().toString().substring(0, 20);
-
-            // Sử dụng UserFactory để tạo user object
-            User user = UserFactory.createUser(regRequest.getRole());
-            if (user == null) {
-                throw new ValidationException("Role không hợp lệ: " + regRequest.getRole());
-            }
-
-            user.setUsername(regRequest.getUsername());
-            user.setPassword(regRequest.getPassword());
-            user.setEmail(regRequest.getEmail());
-
-            // Set role-specific code
-            if (user instanceof Admin) {
-                ((Admin) user).setAdminCode(generatedCode);
-            } else if (user instanceof Lecturer) {
-                ((Lecturer) user).setLecturerCode(generatedCode);
-            } else if (user instanceof Student) {
-                ((Student) user).setStudentCode(generatedCode);
-            }
-
-            userService.createUser(user);
-            logger.info("User registered successfully: username={}, role={}", user.getUsername(), user.getRole());
-
+            userService.registerUser(regRequest);
+            logger.info("User registered successfully: username={}", regRequest.getUsername());
             return ResponseEntity.ok(new ApiResponse(true, "Đăng ký tài khoản thành công!", null));
 
         } catch (ValidationException e) {

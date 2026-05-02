@@ -3,107 +3,52 @@ package srpm.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import srpm.dto.response.ApiResponse;
-import srpm.model.Submission;
 import srpm.model.Student;
 import srpm.model.User;
-import srpm.repository.GroupMemberRepository;
-import srpm.repository.UserRepository;
-import srpm.service.impl.SubmissionService;
+import srpm.service.IAuthorizationService;
+import srpm.service.ISubmissionService;
 
-import java.util.Map;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/submissions")
 @CrossOrigin(origins = "http://localhost:5173")
 public class SubmissionController {
 
-    private final SubmissionService submissionService;
-    private final UserRepository userDao;
-    private final GroupMemberRepository groupMemberDao;
+    private final ISubmissionService submissionService;
+    private final IAuthorizationService authorizationService;
 
     @Autowired
     public SubmissionController(
-            SubmissionService submissionService,
-            UserRepository userDao,
-            GroupMemberRepository groupMemberDao
+            ISubmissionService submissionService,
+            IAuthorizationService authorizationService
     ) {
         this.submissionService = submissionService;
-        this.userDao = userDao;
-        this.groupMemberDao = groupMemberDao;
+        this.authorizationService = authorizationService;
     }
 
-    /**
-     * Sinh viên nộp bài cho một Issue
-     * POST /api/submissions
-     *
-     * Form data:
-     * - issueId: ID của Issue
-     * - content: Nội dung bài nộp (link hoặc text)
-     */
     @PostMapping
     public ResponseEntity<ApiResponse> submitIssue(
             @RequestParam Long issueId,
             @RequestParam String content
     ) {
         try {
-            // ========== Lấy thông tin người nộp từ JWT ==========
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || !authentication.isAuthenticated()) {
+            User user = authorizationService.getCurrentUser()
+                    .orElse(null);
+            if (user == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
-                        false,
-                        "Chưa xác thực",
-                        null
-                ));
+                        false, "Chưa xác thực", null));
             }
 
-            String username = authentication.getName();
-            var userOptional = userDao.findByUsernameOrEmail(username, username);
-
-            if (userOptional.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse(
-                        false,
-                        "User không tồn tại",
-                        null
-                ));
-            }
-
-            User user = userOptional.get();
-
-            // Chỉ Student mới được nộp bài
-            if (!(user instanceof Student)) {
+            if (!(user instanceof Student student)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiResponse(
-                        false,
-                        "Chỉ sinh viên được phép nộp bài",
-                        null
-                ));
+                        false, "Chỉ sinh viên được phép nộp bài", null));
             }
 
-            Student student = (Student) user;
-
-            // ========== Lấy GroupMember của student ==========
-            // Giả sử student chỉ thuộc 1 group (hoặc lấy group từ context)
-            var groupMembers = groupMemberDao.findByStudent(student.getID());
-            if (groupMembers.isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse(
-                        false,
-                        "Sinh viên không thuộc nhóm nào",
-                        null
-                ));
-            }
-
-            // Lấy member đầu tiên (hoặc có thể thêm groupId vào request)
-            var groupMember = groupMembers.get(0);
-
-            // ========== Gọi service để xử lý submission ==========
-            Submission submission = submissionService.submitForIssue(
-                    issueId,
-                    groupMember.getId(),
-                    content
-            );
+            var submission = submissionService.submitIssue(issueId, content, student);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponse(
                     true,
@@ -119,14 +64,26 @@ public class SubmissionController {
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(new ApiResponse(
-                    false,
-                    e.getMessage(),
-                    null
+                    false, e.getMessage(), null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiResponse(
+                    false, "Lỗi nộp bài: " + e.getMessage(), null));
+        }
+    }
+
+    @GetMapping("/check/{issueId}")
+    public ResponseEntity<ApiResponse> checkSubmission(@PathVariable Long issueId) {
+        try {
+            boolean hasSubmission = submissionService.isIssueSubmitted(issueId);
+            return ResponseEntity.ok(new ApiResponse(
+                    true,
+                    hasSubmission ? "Issue đã được nộp bài" : "Issue chưa được nộp bài",
+                    Map.of("submitted", hasSubmission)
             ));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiResponse(
                     false,
-                    "Lỗi nộp bài: " + e.getMessage(),
+                    "Lỗi kiểm tra: " + e.getMessage(),
                     null
             ));
         }

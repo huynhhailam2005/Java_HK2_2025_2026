@@ -1,5 +1,7 @@
 package srpm.dto.response;
 
+import srpm.dto.GroupDto;
+
 public class GroupResponse {
     private boolean success;
     private String message;

@@ -1,5 +1,6 @@
 package srpm.service;
 
+import srpm.dto.request.RegisterRequest;
 import srpm.dto.request.UpdateLecturerRequest;
 import srpm.dto.request.UpdateStudentRequest;
 import srpm.dto.request.UpdateUserRequest;
@@ -13,9 +14,9 @@ public interface IUserService {
 
     Optional<User> login(String username, String password);
 
-    User createUser(User user);
+    User registerUser(RegisterRequest regRequest);
 
-    User updateUser(User user);
+    User createUser(User user);
 
     User updateUserInfo(Long userId, UpdateUserRequest request);
 
@@ -23,8 +24,8 @@ public interface IUserService {
 
     Student updateStudentInfo(Long userId, UpdateStudentRequest request);
 
-    Optional<User> getUserById(Long id);
+    void changePassword(Long userId, String oldPassword, String newPassword);
 
-    void deleteUser(Long id);
+    Optional<User> getUserById(Long id);
 }
 

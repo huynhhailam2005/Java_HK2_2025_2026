@@ -38,19 +38,22 @@ public class IssueDao {
     return result.stream().findFirst();
   }
 
+  // File: src/main/java/srpm/dao/IssueDao.java
   public List<Issue> findByGroupIdOrderByCreatedAtDesc(Long groupId) {
-    return entityManager
-        .createQuery(
-            "SELECT i FROM Issue i WHERE i.group.id = :groupId ORDER BY i.createdAt DESC",
-            Issue.class)
-        .setParameter("groupId", groupId)
-        .getResultList();
+    return entityManager.createQuery(
+                    "SELECT i FROM Issue i " +
+                            "LEFT JOIN FETCH i.assignedTo gm " + // Lấy Member (có thể null)
+                            "LEFT JOIN FETCH gm.student s " +    // Lấy Student (con của User)
+                            "WHERE i.group.id = :groupId " +
+                            "ORDER BY i.createdAt DESC", Issue.class)
+            .setParameter("groupId", groupId)
+            .getResultList();
   }
 
-  public List<Issue> findByGroupIdAndIssueCodeIsNullAndIsDeletedFalse(Long groupId) {
+  public List<Issue> findByGroupIdAndIssueCodeIsNull(Long groupId) {
     return entityManager
         .createQuery(
-            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NULL AND i.isDeleted = false",
+            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NULL",
             Issue.class)
         .setParameter("groupId", groupId)
         .getResultList();
@@ -60,7 +63,7 @@ public class IssueDao {
     if (jiraKeys == null || jiraKeys.isEmpty()) {
       return entityManager
           .createQuery(
-              "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NOT NULL AND i.isDeleted = false",
+              "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NOT NULL",
               Issue.class)
           .setParameter("groupId", groupId)
           .getResultList();
@@ -68,23 +71,29 @@ public class IssueDao {
 
     return entityManager
         .createQuery(
-            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode NOT IN :jiraKeys AND i.isDeleted = false",
+            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode NOT IN :jiraKeys",
             Issue.class)
         .setParameter("groupId", groupId)
         .setParameter("jiraKeys", jiraKeys)
         .getResultList();
   }
 
-  public List<Issue> findByGroupIdAndIssueCodeIsNotNullAndIsDeletedFalse(Long groupId) {
+  public List<Issue> findByGroupIdAndIssueCodeIsNotNull(Long groupId) {
     return entityManager
         .createQuery(
-            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NOT NULL AND i.isDeleted = false",
+            "SELECT i FROM Issue i WHERE i.group.id = :groupId AND i.issueCode IS NOT NULL",
             Issue.class)
         .setParameter("groupId", groupId)
         .getResultList();
   }
+
+  public List<Issue> findByAssignedToStudentId(Long studentId) {
+    return entityManager.createQuery(
+            "SELECT i FROM Issue i " +
+            "LEFT JOIN FETCH i.group g " +
+            "WHERE i.assignedTo.student.id = :studentId " +
+            "ORDER BY i.createdAt DESC", Issue.class)
+            .setParameter("studentId", studentId)
+            .getResultList();
+  }
 }
-
-
-
-

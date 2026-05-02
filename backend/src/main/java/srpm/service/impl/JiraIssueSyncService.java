@@ -17,9 +17,9 @@ import srpm.model.Issue;
 import srpm.model.IssueType;
 import srpm.model.IssueStatus;
 import srpm.model.SyncStatus;
-import srpm.repository.GroupMemberRepository;
-import srpm.repository.GroupRepository;
-import srpm.repository.IssueRepository;
+import srpm.repository.IGroupMemberRepository;
+import srpm.repository.IGroupRepository;
+import srpm.repository.IIssueRepository;
 import srpm.service.IJiraIssueSyncService;
 
 import java.util.*;
@@ -28,28 +28,28 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class JiraIssueSyncService implements IJiraIssueSyncService {
 
-    private final GroupRepository groupRepository;
-    private final IssueRepository issueRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final IGroupRepository IGroupRepository;
+    private final IIssueRepository IIssueRepository;
+    private final IGroupMemberRepository IGroupMemberRepository;
     private final RestTemplate restTemplate;
     private static final Logger logger = LoggerFactory.getLogger(JiraIssueSyncService.class);
 
     @Autowired
     public JiraIssueSyncService(
-            GroupRepository groupRepository,
-            IssueRepository issueRepository,
-            GroupMemberRepository groupMemberRepository,
+            IGroupRepository IGroupRepository,
+            IIssueRepository IIssueRepository,
+            IGroupMemberRepository IGroupMemberRepository,
             RestTemplate restTemplate
     ) {
-        this.groupRepository = groupRepository;
-        this.issueRepository = issueRepository;
-        this.groupMemberRepository = groupMemberRepository;
+        this.IGroupRepository = IGroupRepository;
+        this.IIssueRepository = IIssueRepository;
+        this.IGroupMemberRepository = IGroupMemberRepository;
         this.restTemplate = restTemplate;
     }
 
     @Transactional
     public Map<String, Object> syncJiraIssuesToLocalIssues(Long groupId, String projectKey) {
-        Group group = groupRepository.findByIdWithStudentsAndLecturer(groupId)
+        Group group = IGroupRepository.findByIdWithStudentsAndLecturer(groupId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy group: " + groupId));
 
         if (group.getJiraUrl() == null || group.getJiraUrl().isEmpty()) {
@@ -64,7 +64,6 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
 
         logger.info("Bắt đầu đồng bộ issues từ Jira project: {}", projectKey);
 
-        // Fetch tất cả issues từ Jira bằng POST method để an toàn và lấy đầy đủ fields
         List<Map<String, Object>> jiraIssues = fetchAllIssuesFromJira(
                 group.getJiraUrl(),
                 projectKey,
@@ -72,7 +71,6 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
                 group.getJiraApiToken()
         );
 
-        // Sync theo thứ tự ưu tiên: Epic -> Story/Task -> Sub-Task để không bị mất Parent
         Map<String, Issue> syncedIssuesMap = syncIssuesInOrder(group, jiraIssues);
 
         return Map.of(
@@ -84,16 +82,13 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
 
     private List<Map<String, Object>> fetchAllIssuesFromJira(String jiraUrl, String projectKey, String adminEmail, String apiToken) {
         try {
-            // Dùng endpoint mới của Jira Cloud
             String urlBase = jiraUrl.replaceAll("/$", "") + "/rest/api/3/search/jql";
 
-            // JQL lấy toàn bộ issues của Project
             String jql = "project = \"" + projectKey + "\"";
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("jql", jql);
             requestBody.put("maxResults", 1000);
-            // Lấy "*all" để đảm bảo hút được Epic Link và Assignee đầy đủ
             requestBody.put("fields", new String[]{"*all"});
 
             HttpHeaders headers = new HttpHeaders();
@@ -130,17 +125,14 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
         Map<String, Issue> syncedIssuesMap = new HashMap<>();
         Map<String, IssueType> localTypeMap = new HashMap<>();
 
-        // Lấy danh sách các Jira Keys vừa hút về
         List<String> jiraKeys = new ArrayList<>();
 
-        // Bước 0: Phân loại Type trước cho tất cả để chạy cho nhanh
         for (Map<String, Object> jiraIssue : jiraIssues) {
             String key = (String) jiraIssue.get("key");
             jiraKeys.add(key);
             localTypeMap.put(key, determineIssueType(jiraIssue));
         }
 
-        // Bước 1: Đồng bộ EPIC trước
         for (Map<String, Object> jiraIssue : jiraIssues) {
             String key = (String) jiraIssue.get("key");
             if (localTypeMap.get(key) == IssueType.EPIC) {
@@ -149,7 +141,6 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             }
         }
 
-        // Bước 2: Đồng bộ STORY / TASK / BUG (Có thể có cha là Epic)
         for (Map<String, Object> jiraIssue : jiraIssues) {
             String key = (String) jiraIssue.get("key");
             IssueType type = localTypeMap.get(key);
@@ -162,7 +153,6 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             }
         }
 
-        // Bước 3: Đồng bộ SUB-TASK (Bắt buộc phải có Task/Story cha)
         for (Map<String, Object> jiraIssue : jiraIssues) {
             String key = (String) jiraIssue.get("key");
             if (localTypeMap.get(key) == IssueType.SUB_TASK) {
@@ -178,16 +168,12 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             }
         }
 
-        // Bước 4: Xử lý XÓA từ phía Jira
-        // Tìm các Issue trong Database SRPM thuộc group này, có issueCode, nhưng KHÔNG nằm trong danh sách vừa hút về từ Jira
-        // => Điều này có nghĩa là ai đó đã xóa trên Jira
         logger.info("Kiểm tra các Issue bị xóa từ phía Jira...");
-        List<Issue> deletedOnJira = issueRepository.findIssuesNotInJiraKeys(group.getId(), jiraKeys);
+        List<Issue> deletedOnJira = IIssueRepository.findIssuesNotInJiraKeys(group.getId(), jiraKeys);
         for (Issue deletedIssue : deletedOnJira) {
             logger.warn("Phát hiện Issue {} bị xóa từ phía Jira, đánh dấu Soft-Delete trên SRPM", deletedIssue.getIssueCode());
-            deletedIssue.setIsDeleted(true);
             deletedIssue.setSyncStatus(SyncStatus.SYNCED);
-            issueRepository.save(deletedIssue);
+            IIssueRepository.save(deletedIssue);
         }
 
         return syncedIssuesMap;
@@ -199,20 +185,21 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
         @SuppressWarnings("unchecked")
         Map<String, Object> fields = (Map<String, Object>) jiraIssue.get("fields");
 
-        Optional<Issue> existing = issueRepository.findByIssueCodeAndGroupId(issueKey, group.getId());
+        Optional<Issue> existing = IIssueRepository.findByIssueCodeAndGroupId(issueKey, group.getId());
         Issue localIssue = existing.orElse(new Issue());
 
         localIssue.setIssueCode(issueKey);
         localIssue.setGroup(group);
         localIssue.setTitle((String) fields.get("summary"));
-        localIssue.setDescription(fields.get("description") instanceof String ? (String) fields.get("description") : "");
+        localIssue.setDescription(extractDescriptionFromJiraFields(fields));
         localIssue.setIssueType(issueType);
 
         if (parentIssue != null) {
             localIssue.setParent(parentIssue);
+        } else {
+            localIssue.setParent(null);
         }
 
-        // --- ĐỒNG BỘ NGƯỜI ĐƯỢC GIAO (ASSIGNEE) ĐÃ TỐI ƯU ---
         @SuppressWarnings("unchecked")
         Map<String, Object> assignee = (Map<String, Object>) fields.get("assignee");
         if (assignee != null) {
@@ -223,9 +210,8 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             logger.info("Issue {} has assignee - accountId: {}, email: {}, displayName: {}", issueKey, accountId, emailAddress, displayName);
 
             if (accountId != null) {
-                // Tìm trực tiếp GroupMember của group hiện tại có jiraAccountId match
                 logger.info("Tìm GroupMember trong group {} có jiraAccountId: {}", group.getId(), accountId);
-                        var memberOpt = groupMemberRepository.findByGroupAndJiraAccountId(group.getId(), accountId);
+                        var memberOpt = IGroupMemberRepository.findByGroupAndJiraAccountId(group.getId(), accountId);
 
                 if (memberOpt.isPresent()) {
                     localIssue.setAssignedTo(memberOpt.get());
@@ -240,13 +226,10 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             logger.debug("Issue {} không có assignee", issueKey);
             localIssue.setAssignedTo(null);
         }
-        // ----------------------------------------------------
 
         if (existing.isEmpty()) {
-            localIssue.setStatus(IssueStatus.TODO); // Trạng thái mặc định cho task mới
+            localIssue.setStatus(IssueStatus.TODO);
         } else {
-            // ========== ĐỒNG BỘ TRẠNG THÁI TỪ JIRA ==========
-            // Lấy status từ Jira và map về IssueStatus của hệ thống
             @SuppressWarnings("unchecked")
             Map<String, Object> status = (Map<String, Object>) fields.get("status");
             if (status != null) {
@@ -257,11 +240,9 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
             }
         }
 
-        // Luôn đánh dấu là SYNCED sau khi pull từ Jira, và isDeleted = false (vì đang tồn tại trên Jira)
         localIssue.setSyncStatus(SyncStatus.SYNCED);
-        localIssue.setIsDeleted(false);
 
-        return issueRepository.save(localIssue);
+        return IIssueRepository.save(localIssue);
     }
 
     private String getParentKey(Map<String, Object> jiraIssue) {
@@ -269,14 +250,12 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
         Map<String, Object> fields = (Map<String, Object>) jiraIssue.get("fields");
         if (fields == null) return null;
 
-        // Ưu tiên 1: Trường "parent" chuẩn của Jira Cloud hiện đại
         @SuppressWarnings("unchecked")
         Map<String, Object> parent = (Map<String, Object>) fields.get("parent");
         if (parent != null) {
             return (String) parent.get("key");
         }
 
-        // Ưu tiên 2: Quét Epic Link trong các custom fields (dành cho Jira đời cũ)
         for (Map.Entry<String, Object> entry : fields.entrySet()) {
             if (entry.getKey().startsWith("customfield_") && entry.getValue() instanceof String val) {
                 if (val.matches("^[A-Z][A-Z0-9]+-[0-9]+$")) {
@@ -296,16 +275,13 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
         Map<String, Object> it = (Map<String, Object>) fields.get("issuetype");
         if (it == null) return IssueType.TASK;
 
-        // 1. Check cờ subtask của Jira (Chuẩn nhất, bất chấp ngôn ngữ)
         if (Boolean.TRUE.equals(it.get("subtask"))) {
             return IssueType.SUB_TASK;
         }
 
-        // 2. Check HierarchyLevel (0 = Task/Story, 1 = Epic)
         Number level = (Number) it.get("hierarchyLevel");
         if (level != null && level.intValue() == 1) return IssueType.EPIC;
 
-        // 3. Fallback bằng tên nếu các cờ trên không tồn tại
         String name = ((String) it.get("name")).toUpperCase();
         if (name.contains("EPIC")) return IssueType.EPIC;
         if (name.contains("STORY") || name.contains("CÂU CHUYỆN")) return IssueType.STORY;
@@ -314,11 +290,51 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
         return IssueType.TASK;
     }
 
-    /**
-     * Map Jira Status sang IssueStatus của hệ thống
-     * Jira có các status chuẩn: To Do, In Progress, Done
-     * Hệ thống có: TODO, IN_PROGRESS, DONE, CANCELLED
-     */
+    @SuppressWarnings("unchecked")
+    private String extractDescriptionFromJiraFields(Map<String, Object> fields) {
+        Object rawDesc = fields.get("description");
+        if (rawDesc == null) return "";
+
+        if (rawDesc instanceof String) {
+            return (String) rawDesc;
+        }
+
+        if (rawDesc instanceof Map) {
+            return extractTextFromADF((Map<String, Object>) rawDesc);
+        }
+
+        return "";
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractTextFromADF(Map<String, Object> adfNode) {
+        if (adfNode == null) return "";
+
+        StringBuilder sb = new StringBuilder();
+
+        if (adfNode.get("text") instanceof String text) {
+            sb.append(text);
+        }
+
+        Object contentRaw = adfNode.get("content");
+        if (contentRaw instanceof List) {
+            List<Object> contentList = (List<Object>) contentRaw;
+            for (Object child : contentList) {
+                if (child instanceof Map) {
+                    String childText = extractTextFromADF((Map<String, Object>) child);
+                    if (!childText.isEmpty()) {
+                        if (!sb.isEmpty() && !childText.startsWith("\n")) {
+                            sb.append("\n");
+                        }
+                        sb.append(childText);
+                    }
+                }
+            }
+        }
+
+        return sb.toString();
+    }
+
     private IssueStatus mapJiraStatusToLocal(String jiraStatusName) {
         if (jiraStatusName == null) {
             return IssueStatus.TODO;
@@ -326,21 +342,20 @@ public class JiraIssueSyncService implements IJiraIssueSyncService {
 
         String status = jiraStatusName.toUpperCase();
 
-        // Mapping chuẩn Jira
         if (status.contains("DONE") || status.contains("CLOSED")) {
             return IssueStatus.DONE;
         }
         if (status.contains("IN PROGRESS") || status.contains("INPROGRESS")) {
             return IssueStatus.IN_PROGRESS;
         }
-        if (status.contains("CANCELLED") || status.contains("CANCEL") || status.contains("REJECTED")) {
-            return IssueStatus.CANCELLED;
-        }
+                if (status.contains("CANCELLED") || status.contains("CANCEL") || status.contains("REJECTED")) {
+              return IssueStatus.DONE;
+          }
         if (status.contains("TO DO") || status.contains("TODO") || status.contains("BACKLOG") || status.contains("OPEN")) {
             return IssueStatus.TODO;
         }
 
-        // Default
         return IssueStatus.TODO;
     }
 }
+

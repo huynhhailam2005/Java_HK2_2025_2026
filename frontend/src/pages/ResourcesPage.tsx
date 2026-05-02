@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Github, Link as LinkIcon, RefreshCw, GitCommit, GitBranch, ExternalLink } from 'lucide-react';
 import { githubApi } from '../services/githubApi';
+import { adminApi } from '../services/adminApi';
 import { showLiquidToast } from '../utils/toast';
 
 interface CommitItem {
@@ -18,8 +19,8 @@ const ResourcesPage = () => {
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
 
-    const MOCK_GROUP_ID = 1; // Tạm fix cứng ID nhóm để test
-    const IS_TEAM_LEADER = true; // Chỉ Leader mới được phép Link Repo
+    const MOCK_GROUP_ID = 1;
+    const IS_TEAM_LEADER = true;
 
     useEffect(() => {
         void fetchCommits();
@@ -28,17 +29,14 @@ const ResourcesPage = () => {
     const fetchCommits = async () => {
         setLoading(true);
         try {
-            const res = await githubApi.getCommits(MOCK_GROUP_ID);
-            setCommits((res.data.data as unknown as CommitItem[]) || []);
+            const res = await githubApi.getTeamCommitHistory(MOCK_GROUP_ID);
+            const data = res.data.data as any;
+            if (data?.commits) {
+                setCommits(data.commits as CommitItem[]);
+            }
         } catch (error) {
             console.error("Lỗi fetch commits:", error);
-            // MOCK DATA: Giả lập dữ liệu nếu API chưa sẵn sàng
-            setCommits([
-                { id: 'a1b2c3d', message: 'feat: Hoàn thành API Login và JWT', author: 'lam_pro', date: '2024-03-20 14:30', url: '#' },
-                { id: 'f4e5d6c', message: 'fix: Lỗi văng trang khi chưa có token', author: 'lam_pro', date: '2024-03-19 09:15', url: '#' },
-                { id: '9a8b7c6', message: 'chore: Setup project structure', author: 'thanh_dev', date: '2024-03-18 10:00', url: '#' },
-            ]);
-            setRepoUrl('https://github.com/huynhhailam2005/Java_HK2_2025_2026');
+            showLiquidToast('Không thể tải lịch sử commit', 'error');
         } finally {
             setLoading(false);
         }
@@ -52,12 +50,12 @@ const ResourcesPage = () => {
 
         setIsSyncing(true);
         try {
-            await githubApi.syncRepo(MOCK_GROUP_ID, repoUrl);
-            showLiquidToast('Đồng bộ GitHub thành công!', 'success');
+            await adminApi.updateGroup(MOCK_GROUP_ID, { githubRepoUrl: repoUrl });
+            showLiquidToast('Cập nhật GitHub Repository thành công!', 'success');
             void fetchCommits();
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
-            showLiquidToast(err.response?.data?.message || 'Lỗi khi đồng bộ GitHub!', 'error');
+            showLiquidToast(err.response?.data?.message || 'Lỗi khi cập nhật GitHub!', 'error');
         } finally {
             setIsSyncing(false);
         }

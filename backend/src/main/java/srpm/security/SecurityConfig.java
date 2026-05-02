@@ -47,7 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/feedbacks/**").hasAnyRole("LECTURER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/feedbacks/**").hasAnyRole("STUDENT", "LECTURER", "ADMIN")
                         .requestMatchers("/api/submissions/**").hasAnyRole("STUDENT", "LECTURER", "ADMIN")
-                        .requestMatchers("/api/tasks/**", "/api/groups/**").hasAnyRole("STUDENT", "LECTURER", "ADMIN")
+                        .requestMatchers("/api/issues/**", "/api/groups/**").hasAnyRole("STUDENT", "LECTURER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -57,7 +57,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(customUserDetailsService);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(customUserDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }

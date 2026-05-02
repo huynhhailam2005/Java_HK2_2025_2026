@@ -6,38 +6,38 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import srpm.model.*;
-import srpm.repository.GroupMemberRepository;
-import srpm.repository.IssueRepository;
-import srpm.repository.SubmissionRepository;
+import srpm.repository.IGroupMemberRepository;
+import srpm.repository.IIssueRepository;
+import srpm.repository.ISubmissionRepository;
 import srpm.service.ISubmissionService;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class SubmissionService implements ISubmissionService {
 
-    private final SubmissionRepository submissionRepository;
-    private final IssueRepository issueRepository;
-    private final GroupMemberRepository groupMemberRepository;
+    private final ISubmissionRepository ISubmissionRepository;
+    private final IIssueRepository IIssueRepository;
+    private final IGroupMemberRepository IGroupMemberRepository;
     private final JiraIssuePushService jiraIssuePushService;
     private static final Logger logger = LoggerFactory.getLogger(SubmissionService.class);
 
     @Autowired
     public SubmissionService(
-            SubmissionRepository submissionRepository,
-            IssueRepository issueRepository,
-            GroupMemberRepository groupMemberRepository,
+            ISubmissionRepository ISubmissionRepository,
+            IIssueRepository IIssueRepository,
+            IGroupMemberRepository IGroupMemberRepository,
             JiraIssuePushService jiraIssuePushService
     ) {
-        this.submissionRepository = submissionRepository;
-        this.issueRepository = issueRepository;
-        this.groupMemberRepository = groupMemberRepository;
+        this.ISubmissionRepository = ISubmissionRepository;
+        this.IIssueRepository = IIssueRepository;
+        this.IGroupMemberRepository = IGroupMemberRepository;
         this.jiraIssuePushService = jiraIssuePushService;
     }
 
-    // Sinh viên nộp bài cho một Issue
     public Submission submitForIssue(
             Long issueId,
             Long groupMemberId,
@@ -45,22 +45,20 @@ public class SubmissionService implements ISubmissionService {
     ) {
         logger.info("Sinh viên {} nộp bài cho Issue {}", groupMemberId, issueId);
 
-        Issue issue = issueRepository.findById(issueId)
+        Issue issue = IIssueRepository.findById(issueId)
                 .orElseThrow(() -> new RuntimeException("Issue không tồn tại: " + issueId));
 
-        if (issue.getIsDeleted()) {
-            throw new RuntimeException("Issue đã bị xóa");
+        if (issue.getStatus() == IssueStatus.DONE) {
+            throw new RuntimeException("Issue đã hoàn thành, không thể nộp bài. Trạng thái hiện tại: " + issue.getStatus());
         }
 
-        if (issue.getStatus() == IssueStatus.DONE || issue.getStatus() == IssueStatus.CANCELLED) {
-            throw new RuntimeException("Issue đã hoàn thành hoặc bị hủy, không thể nộp bài. Trạng thái hiện tại: " + issue.getStatus());
-        }
-
-        GroupMember submitter = groupMemberRepository.findById(groupMemberId)
+        GroupMember submitter = IGroupMemberRepository.findById(groupMemberId)
                 .orElseThrow(() -> new RuntimeException("GroupMember không tồn tại: " + groupMemberId));
 
         if (!submitter.getGroup().getId().equals(issue.getGroup().getId())) {
-            throw new RuntimeException("Sinh viên không thuộc nhóm của Issue này");
+            throw new RuntimeException(
+                    "Sinh viên không thuộc nhóm của Issue này (submitterGroupId=" + submitter.getGroup().getId()
+                    + ", issueGroupId=" + issue.getGroup().getId() + ")");
         }
 
         if (issue.getAssignedTo() == null) {
@@ -71,6 +69,26 @@ public class SubmissionService implements ISubmissionService {
             throw new RuntimeException("Bạn không được giao Issue này. Chỉ người được giao mới có thể nộp bài.");
         }
 
+        return saveSubmissionAndUpdateStatus(issue, submitter, content);
+    }
+
+    @Override
+    @Transactional
+    public Submission submitIssue(Long issueId, String content, Student student) {
+        logger.info("Sinh viên {} (ID={}) nộp bài cho Issue {}", student.getUsername(), student.getID(), issueId);
+
+        Issue issue = IIssueRepository.findById(issueId)
+                .orElseThrow(() -> new RuntimeException("Issue không tồn tại: " + issueId));
+
+        // ✅ Tìm GroupMember của sinh viên thuộc đúng group của Issue
+        var groupMember = IGroupMemberRepository.findByGroupAndStudent(issue.getGroup().getId(), student.getID())
+                .orElseThrow(() -> new RuntimeException(
+                        "Sinh viên không phải thành viên của nhóm (groupId=" + issue.getGroup().getId() + ") chứa Issue này"));
+
+        return submitForIssue(issueId, groupMember.getId(), content);
+    }
+
+    private Submission saveSubmissionAndUpdateStatus(Issue issue, GroupMember submitter, String content) {
         String submissionCode = generateSubmissionCode();
         Submission submission = new Submission();
         submission.setSubmissionCode(submissionCode);
@@ -79,11 +97,11 @@ public class SubmissionService implements ISubmissionService {
         submission.setContent(content);
         submission.setSubmittedAt(LocalDateTime.now());
 
-        submission = submissionRepository.save(submission);
+        submission = ISubmissionRepository.save(submission);
         logger.info("✓ Tạo Submission thành công: {}", submissionCode);
 
         issue.setStatus(IssueStatus.DONE);
-        issueRepository.save(issue);
+        IIssueRepository.save(issue);
         logger.info("✓ Cập nhật Issue status thành DONE");
 
         if (issue.getIssueCode() != null && !issue.getIssueCode().isEmpty()) {
@@ -104,14 +122,21 @@ public class SubmissionService implements ISubmissionService {
         return submission;
     }
 
-    /**
-     * Sinh mã Submission: SUB-{TIMESTAMP}-{RANDOM}
-     * Tổng độ dài: 4 + 8 + 1 + 4 = 17 character (dưới limit 20)
-     */
+    @Override
+    public boolean isIssueSubmitted(Long issueId) {
+        return !ISubmissionRepository.findByIssueId(issueId).isEmpty();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Submission> getSubmissionsByGroup(Long groupId) {
+        logger.debug("Lấy submissions cho group {}", groupId);
+        return ISubmissionRepository.findByGroupId(groupId);
+    }
+
     private String generateSubmissionCode() {
         String timestamp = String.valueOf(System.currentTimeMillis());
         String random = UUID.randomUUID().toString().substring(0, 4);
         return "SUB-" + timestamp.substring(timestamp.length() - 8) + "-" + random;
     }
 }
-

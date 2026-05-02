@@ -5,8 +5,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import srpm.dto.response.ApiResponse;
-import srpm.dto.response.GroupMemberDto;
+import srpm.dto.GroupMemberDto;
 import srpm.model.GroupMember;
+import srpm.model.User;
+import srpm.service.IAuthorizationService;
 import srpm.service.impl.GroupAccessService;
 import srpm.service.impl.TeamLeaderService;
 
@@ -20,20 +22,28 @@ public class TeamLeaderController {
 
     private final TeamLeaderService teamLeaderService;
     private final GroupAccessService groupAccessService;
+    private final IAuthorizationService authorizationService;
 
     @Autowired
-    public TeamLeaderController(TeamLeaderService teamLeaderService, GroupAccessService groupAccessService) {
+    public TeamLeaderController(TeamLeaderService teamLeaderService,
+                                 GroupAccessService groupAccessService,
+                                 IAuthorizationService authorizationService) {
         this.teamLeaderService = teamLeaderService;
         this.groupAccessService = groupAccessService;
+        this.authorizationService = authorizationService;
     }
 
     @PostMapping("/{groupId}/team-leader")
     public ResponseEntity<ApiResponse> assignTeamLeader(@PathVariable Long groupId,
                                                         @RequestBody Map<String, Long> request) {
         try {
-            if (!groupAccessService.canAccessGroup(groupId)) {
+            authorizationService.requireAuthentication();
+            User user = authorizationService.getCurrentUser()
+                    .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+            String role = user.getRole().name();
+            if (!"LECTURER".equals(role) && !"ADMIN".equals(role)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new ApiResponse(false, "Bạn không có quyền chỉ định nhóm trưởng cho nhóm này", null));
+                        .body(new ApiResponse(false, "Bạn không có quyền chỉ định nhóm trưởng. Chỉ giảng viên mới được phép.", null));
             }
 
             Long studentId = request.get("studentId");
@@ -54,9 +64,13 @@ public class TeamLeaderController {
     public ResponseEntity<ApiResponse> changeTeamLeader(@PathVariable Long groupId,
                                                         @RequestBody Map<String, Long> request) {
         try {
-            if (!groupAccessService.canAccessGroup(groupId)) {
+            authorizationService.requireAuthentication();
+            User user = authorizationService.getCurrentUser()
+                    .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+            String role = user.getRole().name();
+            if (!"LECTURER".equals(role) && !"ADMIN".equals(role)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new ApiResponse(false, "Bạn không có quyền đổi nhóm trưởng cho nhóm này", null));
+                        .body(new ApiResponse(false, "Bạn không có quyền đổi nhóm trưởng. Chỉ giảng viên mới được phép.", null));
             }
 
             Long newStudentId = request.get("studentId");
@@ -94,9 +108,13 @@ public class TeamLeaderController {
     @DeleteMapping("/{groupId}/team-leader")
     public ResponseEntity<ApiResponse> removeTeamLeader(@PathVariable Long groupId) {
         try {
-            if (!groupAccessService.canAccessGroup(groupId)) {
+            authorizationService.requireAuthentication();
+            User user = authorizationService.getCurrentUser()
+                    .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+            String role = user.getRole().name();
+            if (!"LECTURER".equals(role) && !"ADMIN".equals(role)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new ApiResponse(false, "Bạn không có quyền xóa nhóm trưởng của nhóm này", null));
+                        .body(new ApiResponse(false, "Bạn không có quyền xóa nhóm trưởng. Chỉ giảng viên mới được phép.", null));
             }
 
             boolean removed = teamLeaderService.removeTeamLeader(groupId);

@@ -83,7 +83,6 @@ public class JwtService {
 
     private SecretKey buildSigningKey(String secret) {
         try {
-            // Try Base64 first so production secrets can be safely provided via env.
             byte[] keyBytes = Decoders.BASE64.decode(secret);
             return Keys.hmacShaKeyFor(keyBytes);
         } catch (Exception ex) {

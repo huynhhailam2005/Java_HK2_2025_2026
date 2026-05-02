@@ -3,7 +3,7 @@ export interface ApiResponse<T = unknown> {
     success: boolean;
     message: string;
     data: T;
-} // [cite: 25]
+}
 
 export interface AdminUserResponse {
     id: number;
@@ -14,13 +14,27 @@ export interface AdminUserResponse {
     lecturerCode?: string;
     jiraAccountId?: string;
     githubUsername?: string;
-} // [cite: 25, 26, 27]
+}
+
+export interface GitHubMemberMappingDto {
+    groupMemberId: number;
+    studentId: number;
+    studentCode: string;
+    studentUsername: string;
+    githubUsername: string;
+    groupId: number;
+    groupCode: string;
+    groupName: string;
+    githubRepoUrl: string;
+    isMapped: boolean;
+    mappingStatus: string;
+}
 
 export interface GroupMemberDto {
     id: number;
     student: { id: number; username: string; studentCode: string };
     role: 'LEADER' | 'MEMBER';
-} // [cite: 29]
+}
 
 export interface GroupDto {
     id: number;
@@ -34,18 +48,46 @@ export interface GroupDto {
     githubAccessToken?: string;
     lecturer?: { id: number; username: string; lecturerCode: string };
     groupMembers?: GroupMemberDto[];
-} // [cite: 27, 28, 29]
+}
 
 export interface IssueDto {
-    id: number;
+    issueId: number;
+    issueCode: string;
     title: string;
     description?: string;
-    issueType: 'EPIC' | 'TASK' | 'STORY' | 'BUG' | 'SUB_TASK';
-    status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
-    issueCode?: string;
-    syncStatus?: string;
-    parentId?: number;
+    type: 'EPIC' | 'TASK' | 'STORY' | 'BUG' | 'SUB_TASK';
+    status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+    assignedTo: string;
     deadline?: string;
-    assignedTo?: GroupMemberDto;
-    group?: { id: number; groupName: string };
-} // [cite: 30, 31, 32]
+    parentId?: number | null;
+    parentCode?: string;
+    parentTitle?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    submitted?: boolean;
+}
+
+export interface IssueTreeNode extends IssueDto {
+    children: IssueTreeNode[];
+}
+
+
+export const buildIssueTree = (flatIssues: IssueDto[]): IssueTreeNode[] => {
+    if (!flatIssues || flatIssues.length === 0) return [];
+    const map: Record<number, IssueTreeNode> = {};
+    const roots: IssueTreeNode[] = [];
+
+    flatIssues.forEach(issue => {
+        map[issue.issueId] = { ...issue, children: [] };
+    });
+
+    flatIssues.forEach(issue => {
+        const node = map[issue.issueId];
+        if (issue.parentId && map[issue.parentId]) {
+            map[issue.parentId].children.push(node);
+        } else {
+            roots.push(node);
+        }
+    });
+    return roots;
+};

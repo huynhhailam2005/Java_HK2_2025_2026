@@ -6,18 +6,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import srpm.dto.request.RegisterRequest;
 import srpm.dto.request.UpdateUserRequest;
 import srpm.dto.request.UpdateLecturerRequest;
 import srpm.dto.request.UpdateStudentRequest;
-import srpm.model.User;
-import srpm.model.Lecturer;
-import srpm.model.Student;
-import srpm.repository.LecturerRepository;
-import srpm.repository.StudentRepository;
-import srpm.repository.UserRepository;
+import srpm.dto.response.LecturerResponse;
+import srpm.dto.response.StudentResponse;
+import srpm.exception.ValidationException;
+import srpm.model.*;
+import srpm.repository.ILecturerRepository;
+import srpm.repository.IStudentRepository;
+import srpm.repository.IUserRepository;
 import srpm.service.IUserService;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -26,18 +29,44 @@ public class UserService implements IUserService {
     private static final String BCRYPT_PATTERN = "^\\$2[aby]\\$\\d{2}\\$.*";
     private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
-    private final UserRepository userRepository;
-    private final LecturerRepository lecturerRepository;
-    private final StudentRepository studentRepository;
+    private final IUserRepository IUserRepository;
+    private final ILecturerRepository ILecturerRepository;
+    private final IStudentRepository IStudentRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public UserService(UserRepository userRepository, LecturerRepository lecturerRepository,
-                      StudentRepository studentRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.lecturerRepository = lecturerRepository;
-        this.studentRepository = studentRepository;
+    public UserService(IUserRepository IUserRepository, ILecturerRepository ILecturerRepository,
+                       IStudentRepository IStudentRepository, PasswordEncoder passwordEncoder) {
+        this.IUserRepository = IUserRepository;
+        this.ILecturerRepository = ILecturerRepository;
+        this.IStudentRepository = IStudentRepository;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    @Transactional
+    public User registerUser(RegisterRequest regRequest) {
+        logger.debug("Service register attempt: username={}, email={}", regRequest.getUsername(), regRequest.getEmail());
+
+        String generatedCode = UUID.randomUUID().toString().substring(0, 20);
+
+        User user = UserFactory.createUser(regRequest.getRole());
+        if (user == null) {
+            throw new ValidationException("Role không hợp lệ: " + regRequest.getRole());
+        }
+
+        user.setUsername(regRequest.getUsername());
+        user.setPassword(regRequest.getPassword());
+        user.setEmail(regRequest.getEmail());
+
+        if (user instanceof Admin) {
+            ((Admin) user).setAdminCode(generatedCode);
+        } else if (user instanceof Lecturer) {
+            ((Lecturer) user).setLecturerCode(generatedCode);
+        } else if (user instanceof Student) {
+            ((Student) user).setStudentCode(generatedCode);
+        }
+
+        return createUser(user);
     }
 
     @Transactional
@@ -46,7 +75,7 @@ public class UserService implements IUserService {
             logger.debug("Login failed: null or empty parameters");
             return Optional.empty();
         }
-        User user = userRepository.findByUsernameOrEmail(username.trim(), username.trim()).orElse(null);
+        User user = IUserRepository.findByUsernameOrEmail(username.trim(), username.trim()).orElse(null);
         logger.debug("User lookup result: {}", user != null ? user.getUsername() + " (role=" + user.getRole() + ")" : "NOT FOUND");
 
         if (user != null && matchesAndUpgradeLegacyPasswordIfNeeded(user, password)) {
@@ -59,22 +88,16 @@ public class UserService implements IUserService {
 
     @Transactional
     public User createUser(User user) {
-        if (userRepository.existsByUsername(user.getUsername())) throw new IllegalArgumentException("Username đã tồn tại");
-        if (userRepository.existsByEmail(user.getEmail())) throw new IllegalArgumentException("Email đã tồn tại");
+        if (IUserRepository.existsByUsername(user.getUsername())) throw new IllegalArgumentException("Username đã tồn tại");
+        if (IUserRepository.existsByEmail(user.getEmail())) throw new IllegalArgumentException("Email đã tồn tại");
 
         user.setPassword(encodePasswordIfNeeded(user.getPassword()));
-        return userRepository.save(user);
-    }
-
-    @Transactional
-    public User updateUser(User user) {
-        user.setPassword(encodePasswordIfNeeded(user.getPassword()));
-        return userRepository.save(user);
+        return IUserRepository.save(user);
     }
 
     @Transactional
     public User updateUserInfo(Long userId, UpdateUserRequest request) {
-        Optional<User> userOpt = userRepository.findById(userId);
+        Optional<User> userOpt = IUserRepository.findById(userId);
         if (!userOpt.isPresent()) {
             throw new IllegalArgumentException("User không tồn tại");
         }
@@ -83,7 +106,7 @@ public class UserService implements IUserService {
 
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
             if (!request.getUsername().equals(user.getUsername()) &&
-                userRepository.existsByUsername(request.getUsername())) {
+                IUserRepository.existsByUsername(request.getUsername())) {
                 throw new IllegalArgumentException("Username đã tồn tại");
             }
             user.setUsername(request.getUsername());
@@ -91,22 +114,18 @@ public class UserService implements IUserService {
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
             if (!request.getEmail().equals(user.getEmail()) &&
-                userRepository.existsByEmail(request.getEmail())) {
+                IUserRepository.existsByEmail(request.getEmail())) {
                 throw new IllegalArgumentException("Email đã tồn tại");
             }
             user.setEmail(request.getEmail());
         }
 
-        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
-            user.setPassword(encodePasswordIfNeeded(request.getPassword()));
-        }
-
-        return userRepository.save(user);
+        return IUserRepository.save(user);
     }
 
     @Transactional
     public Lecturer updateLecturerInfo(Long userId, UpdateLecturerRequest request) {
-        Optional<Lecturer> lecturerOpt = lecturerRepository.findByUserId(userId);
+        Optional<Lecturer> lecturerOpt = ILecturerRepository.findByUserId(userId);
         if (!lecturerOpt.isPresent()) {
             throw new IllegalArgumentException("Lecturer không tồn tại");
         }
@@ -115,7 +134,7 @@ public class UserService implements IUserService {
 
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
             if (!request.getUsername().equals(lecturer.getUsername()) &&
-                userRepository.existsByUsername(request.getUsername())) {
+                IUserRepository.existsByUsername(request.getUsername())) {
                 throw new IllegalArgumentException("Username đã tồn tại");
             }
             lecturer.setUsername(request.getUsername());
@@ -123,26 +142,22 @@ public class UserService implements IUserService {
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
             if (!request.getEmail().equals(lecturer.getEmail()) &&
-                userRepository.existsByEmail(request.getEmail())) {
+                IUserRepository.existsByEmail(request.getEmail())) {
                 throw new IllegalArgumentException("Email đã tồn tại");
             }
             lecturer.setEmail(request.getEmail());
-        }
-
-        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
-            lecturer.setPassword(encodePasswordIfNeeded(request.getPassword()));
         }
 
         if (request.getLecturerId() != null && !request.getLecturerId().trim().isEmpty()) {
             lecturer.setLecturerCode(request.getLecturerId());
         }
 
-        return lecturerRepository.save(lecturer);
+        return ILecturerRepository.save(lecturer);
     }
 
     @Transactional
     public Student updateStudentInfo(Long userId, UpdateStudentRequest request) {
-        Optional<Student> studentOpt = studentRepository.findByUserId(userId);
+        Optional<Student> studentOpt = IStudentRepository.findByUserId(userId);
         if (!studentOpt.isPresent()) {
             throw new IllegalArgumentException("Student không tồn tại");
         }
@@ -151,7 +166,7 @@ public class UserService implements IUserService {
 
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
             if (!request.getUsername().equals(student.getUsername()) &&
-                userRepository.existsByUsername(request.getUsername())) {
+                IUserRepository.existsByUsername(request.getUsername())) {
                 throw new IllegalArgumentException("Username đã tồn tại");
             }
             student.setUsername(request.getUsername());
@@ -159,14 +174,10 @@ public class UserService implements IUserService {
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
             if (!request.getEmail().equals(student.getEmail()) &&
-                userRepository.existsByEmail(request.getEmail())) {
+                IUserRepository.existsByEmail(request.getEmail())) {
                 throw new IllegalArgumentException("Email đã tồn tại");
             }
             student.setEmail(request.getEmail());
-        }
-
-        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
-            student.setPassword(encodePasswordIfNeeded(request.getPassword()));
         }
 
         if (request.getStudentId() != null && !request.getStudentId().trim().isEmpty()) {
@@ -181,16 +192,57 @@ public class UserService implements IUserService {
             student.setGithubUsername(request.getGithubUsername());
         }
 
-        return studentRepository.save(student);
-    }
-
-    public Optional<User> getUserById(Long id) {
-        return userRepository.findById(id);
+        return IStudentRepository.save(student);
     }
 
     @Transactional
-    public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = IUserRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User không tồn tại"));
+
+        if (oldPassword == null || oldPassword.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mật khẩu cũ không được để trống");
+        }
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mật khẩu mới không được để trống");
+        }
+
+        if (!matchesAndUpgradeLegacyPasswordIfNeeded(user, oldPassword)) {
+            throw new IllegalArgumentException("Mật khẩu cũ không chính xác");
+        }
+
+        if (oldPassword.equals(newPassword)) {
+            throw new IllegalArgumentException("Mật khẩu mới không được trùng với mật khẩu cũ");
+        }
+
+        user.setPassword(encodePasswordIfNeeded(newPassword));
+        IUserRepository.save(user);
+
+        logger.info("Password changed successfully for user: {}", user.getUsername());
+    }
+
+    public Optional<User> getUserById(Long id) {
+        return IUserRepository.findById(id);
+    }
+
+    public Object toUserResponse(User user) {
+        if (user instanceof Student) {
+            Long userId = user.getID();
+            Student student = IStudentRepository.findByUserId(userId).orElse((Student) user);
+            return new StudentResponse(
+                    student.getID(), student.getUsername(), student.getEmail(),
+                    student.getRole(), student.getStudentCode(),
+                    student.getJiraAccountId(), student.getGithubUsername()
+            );
+        } else if (user instanceof Lecturer) {
+            Long userId = user.getID();
+            Lecturer lecturer = ILecturerRepository.findByUserId(userId).orElse((Lecturer) user);
+            return new LecturerResponse(
+                    lecturer.getID(), lecturer.getUsername(), lecturer.getEmail(),
+                    lecturer.getRole(), lecturer.getLecturerCode()
+            );
+        }
+        return user;
     }
 
     private boolean matchesAndUpgradeLegacyPasswordIfNeeded(User user, String rawPassword) {
@@ -210,7 +262,7 @@ public class UserService implements IUserService {
         if (rawPassword.equals(storedPassword)) {
             System.out.println("[DEBUG] Password matches as plain text, upgrading to bcrypt...");
             user.setPassword(passwordEncoder.encode(rawPassword));
-            userRepository.save(user);
+            IUserRepository.save(user);
             return true;
         }
 

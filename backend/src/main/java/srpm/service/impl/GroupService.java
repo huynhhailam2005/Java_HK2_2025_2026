@@ -3,6 +3,7 @@ package srpm.service.impl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import srpm.dto.GroupDto;
 import srpm.dto.request.GroupRequest;
 import srpm.dto.request.UpdateGroupRequest;
 import srpm.model.Group;
@@ -10,10 +11,10 @@ import srpm.model.GroupMember;
 import srpm.model.GroupMemberRole;
 import srpm.model.Lecturer;
 import srpm.model.Student;
-import srpm.repository.GroupMemberRepository;
-import srpm.repository.GroupRepository;
-import srpm.repository.LecturerRepository;
-import srpm.repository.StudentRepository;
+import srpm.repository.IGroupMemberRepository;
+import srpm.repository.IGroupRepository;
+import srpm.repository.ILecturerRepository;
+import srpm.repository.IStudentRepository;
 import srpm.service.IGroupService;
 
 import java.time.LocalDateTime;
@@ -24,17 +25,17 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class GroupService implements IGroupService {
 
-    private final GroupRepository groupDao;
-    private final LecturerRepository lecturerDao;
-    private final StudentRepository studentDao;
-    private final GroupMemberRepository groupMemberDao;
+    private final IGroupRepository groupDao;
+    private final ILecturerRepository lecturerDao;
+    private final IStudentRepository studentDao;
+    private final IGroupMemberRepository groupMemberDao;
 
     @Autowired
     public GroupService(
-            GroupRepository groupDao,
-            LecturerRepository lecturerDao,
-            StudentRepository studentDao,
-            GroupMemberRepository groupMemberDao
+            IGroupRepository groupDao,
+            ILecturerRepository lecturerDao,
+            IStudentRepository studentDao,
+            IGroupMemberRepository groupMemberDao
     ) {
         this.groupDao = groupDao;
         this.lecturerDao = lecturerDao;
@@ -42,32 +43,30 @@ public class GroupService implements IGroupService {
         this.groupMemberDao = groupMemberDao;
     }
 
-    /** Lấy tất cả group */
     @Transactional
-    public List<Group> getAllGroups() {
-        return groupDao.findAllWithStudentsAndLecturer();
+    public List<GroupDto> getAllGroups() {
+        return groupDao.findAllWithStudentsAndLecturer()
+                .stream()
+                .map(GroupDto::fromEntity)
+                .toList();
     }
 
-    /** Lấy group theo id */
     @Transactional
-    public Optional<Group> getGroupById(Long id) {
-        return groupDao.findByIdWithStudentsAndLecturer(id);
+    public Optional<GroupDto> getGroupById(Long id) {
+        return groupDao.findByIdWithStudentsAndLecturer(id)
+                .map(GroupDto::fromEntity);
     }
 
-    /** Tạo group mới */
     @Transactional
-    public Group createGroup(GroupRequest req) {
-        // Kiểm tra mã group trùng
+    public GroupDto createGroup(GroupRequest req) {
         if (groupDao.existsByGroupCode(req.getGroupCode())) {
             throw new RuntimeException("Mã group '" + req.getGroupCode() + "' đã tồn tại");
         }
 
-        // Kiểm tra tên group trùng
         if (groupDao.existsByGroupName(req.getGroupName())) {
             throw new RuntimeException("Tên group '" + req.getGroupName() + "' đã tồn tại");
         }
 
-        // Kiểm tra Jira URL + Project Key trùng
         if (req.getJiraUrl() != null && req.getJiraProjectKey() != null) {
             if (groupDao.existsByJiraUrlAndProjectKey(req.getJiraUrl(), req.getJiraProjectKey())) {
                 throw new RuntimeException("Jira URL + Project Key này đã được sử dụng cho group khác");
@@ -87,38 +86,35 @@ public class GroupService implements IGroupService {
         if (req.getGithubRepoUrl() != null) group.setGithubRepoUrl(req.getGithubRepoUrl());
         if (req.getGithubAccessToken() != null) group.setGithubAccessToken(req.getGithubAccessToken());
 
-        return groupDao.save(group);
+        return GroupDto.fromEntity(groupDao.save(group));
     }
 
-    /** Cập nhật tên group */
     @Transactional
-    public Optional<Group> updateGroupName(Long id, String newName) {
+    public Optional<GroupDto> updateGroupName(Long id, String newName) {
         return groupDao.findByIdWithStudentsAndLecturer(id).map(group -> {
             if (newName != null && !newName.trim().isEmpty()) {
                 group.setGroupName(newName);
-                return groupDao.save(group);
+                return GroupDto.fromEntity(groupDao.save(group));
             }
-            return group;
+            return GroupDto.fromEntity(group);
         });
     }
 
-    /** Cập nhật giảng viên cho group */
     @Transactional
-    public Optional<Group> updateGroupLecturer(Long id, Long lecturerId) {
+    public Optional<GroupDto> updateGroupLecturer(Long id, Long lecturerId) {
         return groupDao.findByIdWithStudentsAndLecturer(id).map(group -> {
             if (lecturerId != null) {
                 Lecturer lecturer = lecturerDao.findByUserId(lecturerId)
                         .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + lecturerId));
                 group.setLecturer(lecturer);
-                return groupDao.save(group);
+                return GroupDto.fromEntity(groupDao.save(group));
             }
-            return group;
+            return GroupDto.fromEntity(group);
         });
     }
 
-    /** Cập nhật toàn bộ thông tin group */
     @Transactional
-    public Optional<Group> updateGroupInfo(Long id, UpdateGroupRequest request) {
+    public Optional<GroupDto> updateGroupInfo(Long id, UpdateGroupRequest request) {
         return groupDao.findByIdWithStudentsAndLecturer(id).map(group -> {
             // Cập nhật tên group - kiểm tra trùng
             if (request.getGroupName() != null && !request.getGroupName().trim().isEmpty()) {
@@ -129,20 +125,17 @@ public class GroupService implements IGroupService {
                 group.setGroupName(request.getGroupName());
             }
 
-            // Cập nhật giảng viên
             if (request.getLecturerId() != null) {
                 Lecturer lecturer = lecturerDao.findByUserId(request.getLecturerId())
                         .orElseThrow(() -> new RuntimeException("Không tìm thấy giảng viên: " + request.getLecturerId()));
                 group.setLecturer(lecturer);
             }
 
-            // Kiểm tra Jira URL + Project Key trùng trước khi update
             if (request.getJiraUrl() != null || request.getJiraProjectKey() != null) {
                 String newJiraUrl = request.getJiraUrl() != null ? request.getJiraUrl() : group.getJiraUrl();
                 String newProjectKey = request.getJiraProjectKey() != null ? request.getJiraProjectKey() : group.getJiraProjectKey();
                 
                 if (newJiraUrl != null && newProjectKey != null) {
-                    // Nếu URL hoặc Key thay đổi, kiểm tra xem có trùng với group khác không
                     if ((!newJiraUrl.equals(group.getJiraUrl()) || !newProjectKey.equals(group.getJiraProjectKey())) &&
                         groupDao.existsByJiraUrlAndProjectKeyAndIdNot(newJiraUrl, newProjectKey, id)) {
                         throw new RuntimeException("Jira URL + Project Key này đã được sử dụng cho group khác");
@@ -150,7 +143,6 @@ public class GroupService implements IGroupService {
                 }
             }
 
-            // Cập nhật Jira thông tin
             if (request.getJiraUrl() != null) {
                 group.setJiraUrl(request.getJiraUrl());
             }
@@ -164,7 +156,6 @@ public class GroupService implements IGroupService {
                 group.setJiraAdminEmail(request.getJiraAdminEmail());
             }
 
-            // Cập nhật GitHub thông tin
             if (request.getGithubRepoUrl() != null) {
                 group.setGithubRepoUrl(request.getGithubRepoUrl());
             }
@@ -172,12 +163,11 @@ public class GroupService implements IGroupService {
                 group.setGithubAccessToken(request.getGithubAccessToken());
             }
 
-            return groupDao.save(group);
+            return GroupDto.fromEntity(groupDao.save(group));
         });
     }
 
 
-    /** Xóa group */
     @Transactional
     public boolean deleteGroup(Long id) {
         if (!groupDao.existsById(id)) return false;
@@ -185,9 +175,8 @@ public class GroupService implements IGroupService {
         return true;
     }
 
-    /** Thêm student vào group */
     @Transactional
-    public Group addStudent(Long groupId, Long studentId) {
+    public GroupDto addStudent(Long groupId, Long studentId) {
         try {
             Group group = groupDao.findById(groupId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy group: " + groupId));
@@ -202,9 +191,9 @@ public class GroupService implements IGroupService {
             GroupMember member = new GroupMember(group, student, GroupMemberRole.TEAM_MEMBER);
             groupMemberDao.save(member);
 
-            // Refresh from database after saving
-            return groupDao.findByIdWithStudentsAndLecturer(groupId)
+            Group refreshedGroup = groupDao.findByIdWithStudentsAndLecturer(groupId)
                     .orElseThrow(() -> new RuntimeException("Không thể tải lại group sau khi thêm student"));
+            return GroupDto.fromEntity(refreshedGroup);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
@@ -212,7 +201,6 @@ public class GroupService implements IGroupService {
         }
     }
 
-    /** Xóa student khỏi group */
     @Transactional
     public boolean removeStudent(Long groupId, Long studentId) {
         Optional<GroupMember> memberOptional = groupMemberDao.findByGroupAndStudent(groupId, studentId);
@@ -224,11 +212,38 @@ public class GroupService implements IGroupService {
         return false;
     }
 
-    public List<Group> getGroupsByLecturer(Long lecturerId) {
-        return groupDao.findByLecturerId(lecturerId);
+    @Transactional
+    public boolean removeMember(Long groupId, Long memberId) {
+        if (!groupDao.existsById(groupId)) {
+            throw new RuntimeException("Nhóm không tồn tại: " + groupId);
+        }
+
+        Optional<GroupMember> memberOptional = groupMemberDao.findById(memberId);
+        if (memberOptional.isEmpty()) {
+            throw new RuntimeException("Thành viên không tồn tại: " + memberId);
+        }
+
+        GroupMember member = memberOptional.get();
+
+        if (!member.getGroup().getId().equals(groupId)) {
+            throw new RuntimeException("Thành viên không thuộc nhóm này");
+        }
+
+        groupMemberDao.delete(member);
+        return true;
     }
 
-    public List<Group> getGroupsByStudent(Long studentId) {
-        return groupMemberDao.findGroupsByStudentId(studentId);
+    public List<GroupDto> getGroupsByLecturer(Long lecturerId) {
+        return groupDao.findByLecturerId(lecturerId)
+                .stream()
+                .map(GroupDto::fromEntity)
+                .toList();
+    }
+
+    public List<GroupDto> getGroupsByStudent(Long studentId) {
+        return groupMemberDao.findGroupsByStudentId(studentId)
+                .stream()
+                .map(GroupDto::fromEntity)
+                .toList();
     }
 }

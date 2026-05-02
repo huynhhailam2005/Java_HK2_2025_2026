@@ -2,19 +2,41 @@ import apiClient from './apiClient';
 import type { ApiResponse, IssueDto } from '../types/api';
 
 export const issueApi = {
-    // 1. Lấy danh sách issue của 1 nhóm
     getIssuesByGroup: (groupId: number) =>
         apiClient.get<ApiResponse<IssueDto[]>>(`/api/issues/group/${groupId}`),
 
-    // 2. Tạo mới một Issue (Chỉ Team Leader được làm)
-    createIssue: (body: any) =>
-        apiClient.post<ApiResponse>('/api/issues', body),
+    createIssue: (data: any) =>
+        apiClient.post<ApiResponse>('/api/issues', data),
 
-    // 3. Cập nhật trạng thái Issue (TODO, IN_PROGRESS, DONE)
-    updateIssueStatus: (issueId: number, status: string) =>
-        apiClient.put<ApiResponse>(`/api/issues/${issueId}/status`, { status }),
+    pushToJira: (issueId: number) =>
+        apiClient.post<ApiResponse>(`/api/issues/${issueId}/push-create`),
 
-    // 4. Phân công Issue cho một thành viên
-    assignIssue: (issueId: number, memberId: number) =>
-        apiClient.put<ApiResponse>(`/api/issues/${issueId}/assignee/${memberId}`),
+    updateStatus: (issueId: number, status: string) =>
+        apiClient.patch<ApiResponse>(`/api/issues/${issueId}/status`, { status }),
+
+    syncFromJira: (groupId: number, projectKey: string) =>
+        apiClient.post<ApiResponse>('/api/issues/sync-jira', { groupId, projectKey }),
+
+    getMyAssigned: () =>
+        apiClient.get<ApiResponse>('/api/issues/my-assigned'),
+
+    updateIssue: (issueId: number, data: {
+        title?: string;
+        description?: string;
+        deadline?: string | null;
+        assignedToMemberId?: number | null;
+        parentId?: number | null;
+        status?: string;
+    }) => apiClient.put<ApiResponse>(`/api/issues/${issueId}`, data),
+
+    pushUpdateToJira: (issueId: number) =>
+        apiClient.put<ApiResponse>(`/api/issues/${issueId}/push-update`),
+
+    submitIssue: (issueId: number, content: string) =>
+        apiClient.post<ApiResponse>('/api/submissions', null, {
+            params: { issueId, content }
+        }),
+
+    checkSubmission: (issueId: number) =>
+        apiClient.get<ApiResponse<{ submitted: boolean }>>(`/api/submissions/check/${issueId}`),
 };

@@ -1,20 +1,17 @@
-// src/services/adminApi.ts (VIẾT LẠI HOÀN TOÀN) [cite: 35]
 import apiClient from './apiClient';
 import type { ApiResponse, AdminUserResponse, GroupDto } from '../types/api';
 
 export const adminApi = {
-    // ── User ──
-    getUsers: () => apiClient.get<ApiResponse<AdminUserResponse[]>>('/api/admin/users'), // [cite: 36]
+    getUsers: () => apiClient.get<ApiResponse<AdminUserResponse[]>>('/api/admin/users'),
     getUserById: (id: number) => apiClient.get<ApiResponse>(`/api/admin/users/${id}`),
-    updateUser: (id: number, body: Partial<AdminUserResponse> & { password?: string }) =>
-        apiClient.put<ApiResponse>(`/api/admin/users/${id}`, body), // [cite: 36, 37]
-    deleteUser: (id: number) => apiClient.delete<ApiResponse>(`/api/admin/users/${id}`), // [cite: 37]
+    updateUser: (id: number, body: any) => apiClient.put<ApiResponse>(`/api/admin/users/${id}`, body),
+    deleteUser: (id: number) => apiClient.delete<ApiResponse>(`/api/admin/users/${id}`),
 
-    // ── Group ──
-    getGroups: () => apiClient.get<ApiResponse<GroupDto[]>>('/api/admin/groups'), // [cite: 37]
-    createGroup: (body: Partial<GroupDto> & { lecturerId?: number }) =>
-        apiClient.post<ApiResponse>('/api/admin/groups', body), // [cite: 37]
-    updateGroup: (id: number, body: Partial<GroupDto> & { lecturerId?: number }) =>
-        apiClient.put<ApiResponse>(`/api/admin/groups/${id}`, body), // [cite: 37]
-    deleteGroup: (id: number) => apiClient.delete<ApiResponse>(`/api/admin/groups/${id}`), // [cite: 38]
+    getGroups: () => apiClient.get<ApiResponse<GroupDto[]>>('/api/groups'),
+    getGroupById: (id: number) => apiClient.get<ApiResponse<GroupDto>>(`/api/groups/${id}`),
+    createGroup: (body: any) => apiClient.post<ApiResponse>('/api/groups', body),
+    updateGroup: (id: number, body: any) => apiClient.put<ApiResponse>(`/api/groups/${id}`, body),
+    deleteGroup: (id: number) => apiClient.delete<ApiResponse>(`/api/groups/${id}`),
+    updateGroupLecturer: (id: number, lecturerId: number) =>
+        apiClient.patch<ApiResponse>(`/api/admin/groups/${id}/lecturer`, { lecturerId }),
 };

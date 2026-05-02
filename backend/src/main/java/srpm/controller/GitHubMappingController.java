@@ -6,9 +6,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import srpm.dto.response.ApiResponse;
-import srpm.dto.response.GitHubMemberMappingDto;
+import srpm.dto.GitHubMemberMappingDto;
 import srpm.model.Group;
-import srpm.repository.GroupRepository;
+import srpm.repository.IGroupRepository;
 import srpm.service.impl.GitHubService;
 import srpm.util.GitHubValidationUtil;
 import java.util.List;
@@ -22,12 +22,8 @@ public class GitHubMappingController {
     private GitHubService gitHubService;
 
     @Autowired
-    private GroupRepository groupDao;
+    private IGroupRepository groupDao;
 
-    /**
-     * Lấy danh sách mapping các thành viên nhóm với GitHub
-     * GET /api/github/groups/{groupId}/members
-     */
     @GetMapping("/groups/{groupId}/members")
     @PreAuthorize("hasAnyRole('STUDENT', 'LECTURER', 'ADMIN')")
     public ResponseEntity<ApiResponse> getGroupMemberMappings(@PathVariable Long groupId) {
@@ -40,54 +36,11 @@ public class GitHubMappingController {
         }
     }
 
-    /**
-     * Lấy thông tin mapping của một thành viên nhóm
-     * GET /api/github/groups/{groupId}/members/{memberId}
-     */
-    @GetMapping("/groups/{groupId}/members/{memberId}")
-    @PreAuthorize("hasAnyRole('LECTURER', 'ADMIN')")
-    public ResponseEntity<ApiResponse> getMemberMapping(@PathVariable Long groupId,
-                                                         @PathVariable Long memberId) {
-        try {
-            GitHubMemberMappingDto mapping = gitHubService.getMemberMapping(groupId, memberId);
-            return ResponseEntity.ok(new ApiResponse(true, "Lấy thông tin mapping thành công", mapping));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ApiResponse(false, e.getMessage(), null));
-        }
-    }
-
-
-
-
-    /**
-     * Debug: Lấy danh sách collaborators từ GitHub API
-     * GET /api/github/debug/collaborators?owner=xxx&repo=xxx&accessToken=xxx
-     */
-    @GetMapping("/debug/collaborators")
-    @PreAuthorize("hasAnyRole('LECTURER', 'ADMIN')")
-    public ResponseEntity<ApiResponse> debugGetGitHubCollaborators(@RequestParam String owner,
-                                                                    @RequestParam String repo,
-                                                                    @RequestParam String accessToken) {
-        try {
-            Map<String, Object> debugInfo = gitHubService.debugGetGitHubCollaborators(owner, repo, accessToken);
-            return ResponseEntity.ok(new ApiResponse(true, "Debug collaborators thành công", debugInfo));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ApiResponse(false, e.getMessage(), null));
-        }
-    }
-
-    /**
-     * Lấy thống kê commits của sinh viên trên repo
-     * GET /api/github/groups/{groupId}/members/{memberId}/commits
-     */
     @GetMapping("/groups/{groupId}/members/{memberId}/commits")
     @PreAuthorize("hasAnyRole('STUDENT', 'LECTURER', 'ADMIN')")
     public ResponseEntity<ApiResponse> getMemberCommitStats(@PathVariable Long groupId,
                                                              @PathVariable Long memberId) {
         try {
-            // Lấy thông tin member
             GitHubMemberMappingDto memberMapping = gitHubService.getMemberMapping(groupId, memberId);
 
             if (memberMapping.getGithubUsername() == null || memberMapping.getGithubUsername().isEmpty()) {
@@ -100,7 +53,6 @@ public class GitHubMappingController {
                         .body(new ApiResponse(false, "GitHub username chưa được xác nhận hoặc không tồn tại", null));
             }
 
-            // Lấy repo info từ group
             Group group = groupDao.findById(groupId)
                     .orElseThrow(() -> new RuntimeException("Nhóm không tồn tại"));
 
@@ -116,7 +68,6 @@ public class GitHubMappingController {
             String owner = repoParts[0];
             String repo = repoParts[1];
 
-            // Lấy commit stats
             Map<String, Object> stats = gitHubService.getCommitStats(owner, repo,
                     memberMapping.getGithubUsername(), accessToken);
 
@@ -127,10 +78,6 @@ public class GitHubMappingController {
         }
     }
 
-    /**
-     * Lấy thống kê commits của tất cả team members
-     * GET /api/github/groups/{groupId}/team-commits-summary
-     */
     @GetMapping("/groups/{groupId}/team-commits-summary")
     @PreAuthorize("hasAnyRole('STUDENT', 'LECTURER', 'ADMIN')")
     public ResponseEntity<ApiResponse> getTeamCommitsSummary(@PathVariable Long groupId) {
@@ -143,6 +90,25 @@ public class GitHubMappingController {
             }
 
             return ResponseEntity.ok(new ApiResponse(true, "Lấy thống kê team commits thành công", summary));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ApiResponse(false, e.getMessage(), null));
+        }
+    }
+
+    @GetMapping("/groups/{groupId}/team-commit-history")
+    @PreAuthorize("hasAnyRole('STUDENT', 'LECTURER', 'ADMIN')")
+    public ResponseEntity<ApiResponse> getTeamCommitHistory(@PathVariable Long groupId,
+                                                           @RequestParam(required = false, defaultValue = "30") Integer days) {
+        try {
+            Map<String, Object> history = gitHubService.getTeamCommitHistory(groupId, days);
+
+            if (history.containsKey("error")) {
+                return ResponseEntity.badRequest()
+                        .body(new ApiResponse(false, (String) history.get("error"), null));
+            }
+
+            return ResponseEntity.ok(new ApiResponse(true, "Lấy lịch sử commit thành công", history));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ApiResponse(false, e.getMessage(), null));

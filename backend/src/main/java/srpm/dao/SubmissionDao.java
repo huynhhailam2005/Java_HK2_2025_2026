@@ -32,6 +32,15 @@ public class SubmissionDao {
         .setParameter("issueId", issueId)
         .getResultList();
   }
+
+  public List<Submission> findByGroupId(Long groupId) {
+    return entityManager
+        .createQuery(
+            "SELECT s FROM Submission s JOIN FETCH s.issue i JOIN FETCH s.submittedBy sm " +
+            "WHERE i.group.id = :groupId ORDER BY s.submittedAt DESC", Submission.class)
+        .setParameter("groupId", groupId)
+        .getResultList();
+  }
 }
 
 

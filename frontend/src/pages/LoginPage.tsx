@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AUTH_TOKEN_KEY, getApiErrorMessage, login } from '../services/authApi';
 import type { LoginResponseData } from '../services/authApi';
-// 🛠️ Import hàm hú Toast từ App
 import { showLiquidToast } from '../utils/toast.ts';
 
 const LoginPage = () => {

@@ -16,7 +16,6 @@ import srpm.exception.ValidationException;
 import java.util.HashMap;
 import java.util.Map;
 
-// Centralized exception handler - tất cả exception từ controllers được xử lý ở đây
 @ControllerAdvice
 public class GlobalExceptionHandler {
 

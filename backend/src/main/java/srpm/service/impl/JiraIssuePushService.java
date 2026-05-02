@@ -4,514 +4,280 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import srpm.model.Issue;
+import srpm.model.IssueStatus;
 import srpm.model.IssueType;
 import srpm.model.SyncStatus;
-import srpm.repository.IssueRepository;
+import srpm.repository.IIssueRepository;
 import srpm.service.IJiraIssuePushService;
 
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-/**
- * Service xử lý Push Issues từ SRPM lên Jira
- * Luồng thực tế: Tạo/Cập nhật/Xóa Issue trên SRPM -> Gọi API Jira để đồng bộ
- */
 @Service
 @Transactional
 public class JiraIssuePushService implements IJiraIssuePushService {
 
-    private final IssueRepository issueDao;
+    private final IIssueRepository issueDao;
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger logger = LoggerFactory.getLogger(JiraIssuePushService.class);
 
     @Autowired
-    public JiraIssuePushService(
-            IssueRepository issueDao,
-            RestTemplate restTemplate
-    ) {
+    public JiraIssuePushService(IIssueRepository issueDao, RestTemplate restTemplate) {
         this.issueDao = issueDao;
         this.restTemplate = restTemplate;
-        this.objectMapper = new ObjectMapper();
     }
 
-    // Tạo Issue mới trên Jira từ dữ liệu SRPM
-    public Issue createIssueOnJira(
-            Issue issue,
-            String jiraUrl,
-            String projectKey,
-            String jiraAdminEmail,
-            String jiraApiToken
-    ) {
+    @Override
+    public Issue createIssueOnJira(Issue issue, String jiraUrl, String projectKey, String adminEmail, String apiToken) {
+        if (issue.getIssueType() == IssueType.SUB_TASK && issue.getParent() == null) {
+            throw new RuntimeException("Lỗi: SubTask phải có Issue cha!");
+        }
+
+        if (issue.getParent() != null && issue.getParent().getIssueCode() == null) {
+            logger.info("Issue cha chưa sync, tự động push cha: {} trước", issue.getParent().getTitle());
+            try {
+                createIssueOnJira(issue.getParent(), jiraUrl, projectKey, adminEmail, apiToken);
+                issue.setParent(issueDao.findById(issue.getParent().getId()).orElse(issue.getParent()));
+            } catch (Exception e) {
+                logger.error("Lỗi khi push Issue cha: {}", e.getMessage());
+                throw new RuntimeException("Không thể push Issue cha '" + issue.getParent().getTitle() + "': " + e.getMessage());
+            }
+        }
+
         try {
-            // Đặt trạng thái PENDING trước khi push
-            issue.setSyncStatus(SyncStatus.PENDING);
-            issue = issueDao.save(issue);
+            String url = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue";
+            Map<String, Object> requestBody = buildJiraRequest(issue, projectKey, true, jiraUrl, adminEmail, apiToken);
 
-            String urlBase = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue";
-
-            // Xây dựng request body theo Jira Cloud API v3 (với ADF format)
-            Map<String, Object> requestBody = buildCreateIssueRequest(issue, projectKey);
-
-            HttpHeaders headers = createAuthHeaders(jiraAdminEmail, jiraApiToken);
+            HttpHeaders headers = createAuthHeaders(adminEmail, apiToken);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            logger.info("Tạo Issue mới trên Jira: {} (loại: {})", issue.getTitle(), issue.getIssueType());
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    urlBase,
-                    HttpMethod.POST,
-                    entity,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 String jiraKey = (String) response.getBody().get("key");
                 issue.setIssueCode(jiraKey);
                 issue.setSyncStatus(SyncStatus.SYNCED);
-                issue = issueDao.save(issue);
-                logger.info("✓ Tạo Issue thành công trên Jira với key: {}", jiraKey);
-                return issue;
-            } else {
-                throw new RuntimeException("Jira trả về lỗi: " + response.getStatusCode().value());
+                return issueDao.save(issue);
             }
+            throw new RuntimeException("Jira trả về lỗi: " + response.getStatusCode());
         } catch (HttpClientErrorException e) {
-            // Xử lý lỗi HTTP từ Jira (4xx, 5xx)
-            logger.error("Lỗi HTTP từ Jira API tạo Issue: {}", e.getStatusCode());
-            String errorMessage = extractErrorMessage(e.getResponseBodyAsString());
+            String msg = extractErrorMessage(e);
             issue.setSyncStatus(SyncStatus.ERROR);
             issueDao.save(issue);
-            throw new RuntimeException("Lỗi tạo Issue trên Jira: " + errorMessage);
-        } catch (RestClientException e) {
-            logger.error("Lỗi khi gọi Jira API tạo Issue: {}", e.getMessage());
-            issue.setSyncStatus(SyncStatus.ERROR);
-            issueDao.save(issue);
-            throw new RuntimeException("Lỗi tạo Issue trên Jira: " + e.getMessage());
+            throw new RuntimeException("Lỗi Jira (Create): " + msg);
         }
     }
 
-    // Cập nhật Issue trên Jira
-    public Issue updateIssueOnJira(
-            Issue issue,
-            String jiraUrl,
-            String jiraAdminEmail,
-            String jiraApiToken
-    ) {
+    @Override
+    public Issue updateIssueOnJira(Issue issue, String jiraUrl, String adminEmail, String apiToken) {
         if (issue.getIssueCode() == null || issue.getIssueCode().isEmpty()) {
-            throw new RuntimeException("Issue không có issueCode, không thể cập nhật lên Jira");
+            throw new RuntimeException("Issue này chưa có Key Jira. Hãy dùng 'Push Create' trước!");
         }
 
         try {
-            String urlBase = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue/" + issue.getIssueCode();
+            String url = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue/" + issue.getIssueCode();
+            Map<String, Object> requestBody = buildJiraRequest(issue, null, false, jiraUrl, adminEmail, apiToken);
 
-            // Xây dựng request body với các thông tin cần cập nhật
-            Map<String, Object> requestBody = buildUpdateIssueRequest(issue);
-
-            HttpHeaders headers = createAuthHeaders(jiraAdminEmail, jiraApiToken);
+            HttpHeaders headers = createAuthHeaders(adminEmail, apiToken);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            logger.info("Cập nhật Issue trên Jira: {} - {}", issue.getIssueCode(), issue.getTitle());
-            ResponseEntity<Void> response = restTemplate.exchange(
-                    urlBase,
-                    HttpMethod.PUT,
-                    entity,
-                    Void.class
-            );
+            restTemplate.exchange(url, HttpMethod.PUT, entity, Void.class);
 
-            if (response.getStatusCode().is2xxSuccessful()) {
-                issue.setSyncStatus(SyncStatus.SYNCED);
-                issue = issueDao.save(issue);
-                logger.info("✓ Cập nhật Issue thành công trên Jira: {}", issue.getIssueCode());
-                return issue;
-            } else {
-                throw new RuntimeException("Jira trả về lỗi: " + response.getStatusCode().value());
+            if (issue.getStatus() != null) {
+                try {
+                    String jiraStatusName = mapStatusToJiraName(issue.getStatus());
+                    updateJiraStatus(
+                            issue.getIssueCode(),
+                            jiraStatusName,
+                            jiraUrl,
+                            adminEmail,
+                            apiToken
+                    );
+                } catch (Exception e) {
+                    logger.warn("Không thể đồng bộ trạng thái lên Jira: {}", e.getMessage());
+                }
             }
+
+            issue.setSyncStatus(SyncStatus.SYNCED);
+            return issueDao.save(issue);
         } catch (HttpClientErrorException e) {
-            logger.error("Lỗi HTTP từ Jira API cập nhật Issue: {}", e.getStatusCode());
-            String errorMessage = extractErrorMessage(e.getResponseBodyAsString());
-            issue.setSyncStatus(SyncStatus.ERROR);
-            issueDao.save(issue);
-            throw new RuntimeException("Lỗi cập nhật Issue trên Jira: " + errorMessage);
-        } catch (RestClientException e) {
-            logger.error("Lỗi khi gọi Jira API cập nhật Issue: {}", e.getMessage());
-            issue.setSyncStatus(SyncStatus.ERROR);
-            issueDao.save(issue);
-            throw new RuntimeException("Lỗi cập nhật Issue trên Jira: " + e.getMessage());
+            String msg = extractErrorMessage(e);
+            throw new RuntimeException("Lỗi Jira (Update): " + msg);
         }
     }
 
-    // Xóa Issue trên Jira (Soft-Delete trên SRPM)
-    public void deleteIssueOnJira(
-            Issue issue,
-            String jiraUrl,
-            String jiraAdminEmail,
-            String jiraApiToken
-    ) {
-        if (issue.getIssueCode() == null || issue.getIssueCode().isEmpty()) {
-            logger.warn("Issue không có issueCode, bỏ qua xóa trên Jira");
-            issue.setIsDeleted(true);
-            issueDao.save(issue);
-            return;
+    private String getJiraIssueTypeName(Issue issue, String jiraUrl, String projectKey, String adminEmail, String apiToken) {
+        if (issue.getIssueType() != IssueType.SUB_TASK) {
+            String name = issue.getIssueType().name();
+            return name.charAt(0) + name.substring(1).toLowerCase();
         }
 
         try {
-            String urlBase = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue/" + issue.getIssueCode();
-
-            HttpHeaders headers = createAuthHeaders(jiraAdminEmail, jiraApiToken);
+            String url = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue/createmeta/" + projectKey + "/issuetypes";
+            HttpHeaders headers = createAuthHeaders(adminEmail, apiToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            logger.info("Xóa Issue trên Jira: {}", issue.getIssueCode());
-            ResponseEntity<Void> response = restTemplate.exchange(
-                    urlBase,
-                    HttpMethod.DELETE,
-                    entity,
-                    Void.class
-            );
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
 
-            // 204 No Content = Xóa thành công, 404 Not Found = Đã bị xóa trước đó
-            if (response.getStatusCode() == HttpStatus.NO_CONTENT ||
-                response.getStatusCode() == HttpStatus.NOT_FOUND) {
-                issue.setIsDeleted(true);
-                issue.setSyncStatus(SyncStatus.SYNCED);
-                issueDao.save(issue);
-                logger.info("✓ Xóa Issue thành công trên Jira: {}", issue.getIssueCode());
-            } else {
-                throw new RuntimeException("Jira trả về lỗi: " + response.getStatusCode().value());
+            if (response.getBody() != null) {
+                List<Map<String, Object>> types = (List<Map<String, Object>>) response.getBody().get("values");
+                if (types != null) {
+                    for (Map<String, Object> type : types) {
+                        if (Boolean.TRUE.equals(type.get("subtask"))) {
+                            String name = (String) type.get("name");
+                            logger.info("Tìm thấy Sub-task type name từ Jira: {}", name);
+                            return name;
+                        }
+                    }
+                }
             }
-        } catch (HttpClientErrorException e) {
-            // 404 = Đã bị xóa trước đó, coi như thành công
-            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
-                issue.setIsDeleted(true);
-                issue.setSyncStatus(SyncStatus.SYNCED);
-                issueDao.save(issue);
-                logger.info("✓ Issue đã bị xóa trên Jira trước đó (404), cập nhật SRPM");
+        } catch (Exception e) {
+            logger.warn("Không thể query issue types từ Jira, fallback về mặc định: {}", e.getMessage());
+        }
+        return "Subtask";
+    }
+
+    private Map<String, Object> buildJiraRequest(Issue issue, String projectKey, boolean isCreate,
+                                                 String jiraUrl, String adminEmail, String apiToken) {
+        Map<String, Object> fields = new HashMap<>();
+        fields.put("summary", issue.getTitle());
+        fields.put("description", convertToADF(issue.getDescription()));
+
+        if (isCreate) {
+            fields.put("project", Map.of("key", projectKey));
+            String typeName = getJiraIssueTypeName(issue, jiraUrl, projectKey, adminEmail, apiToken);
+            fields.put("issuetype", Map.of("name", typeName));
+        }
+
+        if (issue.getParent() != null && issue.getParent().getIssueCode() != null) {
+            fields.put("parent", Map.of("key", issue.getParent().getIssueCode()));
+
+            if (issue.getIssueType() == IssueType.SUB_TASK) {
+                logger.info("Gán parent (Sub-task) {} cho issue {}", issue.getParent().getIssueCode(), issue.getTitle());
+            } else {
+                logger.info("Gán Epic/Parent {} cho issue {}", issue.getParent().getIssueCode(), issue.getTitle());
+            }
+        }
+
+        if (issue.getAssignedTo() != null && issue.getAssignedTo().getStudent() != null) {
+            String jiraAccountId = issue.getAssignedTo().getStudent().getJiraAccountId();
+            if (jiraAccountId != null && !jiraAccountId.isEmpty()) {
+                fields.put("assignee", Map.of("accountId", jiraAccountId));
+                logger.info("Gán assignee (accountId={}) cho issue {}", jiraAccountId, issue.getTitle());
+            } else {
+                logger.warn("Sinh viên {} chưa có Jira Account ID, bỏ qua assignee", issue.getAssignedTo().getStudent().getUsername());
+            }
+        } else if (!isCreate) {
+            fields.put("assignee", null);
+            logger.info("Clear assignee cho issue {} trên Jira", issue.getTitle());
+        }
+
+        if (issue.getDeadline() != null) {
+            fields.put("duedate", issue.getDeadline().toLocalDate().toString());
+        }
+        return Map.of("fields", fields);
+    }
+
+    private Map<String, Object> convertToADF(String text) {
+        String safeText = (text == null || text.isEmpty()) ? "No description" : text;
+        return Map.of(
+                "type", "doc", "version", 1,
+                "content", List.of(Map.of(
+                        "type", "paragraph",
+                        "content", List.of(Map.of("type", "text", "text", safeText))
+                ))
+        );
+    }
+
+    private HttpHeaders createAuthHeaders(String email, String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String auth = Base64.getEncoder().encodeToString((email + ":" + token).getBytes());
+        headers.set("Authorization", "Basic " + auth);
+        return headers;
+    }
+
+    private String extractErrorMessage(HttpClientErrorException e) {
+        try {
+            String body = e.getResponseBodyAsString();
+            logger.error("Jira API error - Status: {}, Body: {}", e.getStatusCode(), body);
+
+            if (body.contains("appropriate hierarchy") || body.contains("parent")) {
+                return "Sai cấu trúc! Không thể gán issue này vào issue cha đã chọn trên Jira.";
+            }
+
+            Map map = objectMapper.readValue(body, Map.class);
+            if (map.containsKey("errorMessages")) {
+                Object msgs = map.get("errorMessages");
+                if (msgs instanceof List && ((List<?>) msgs).isEmpty()) {
+                    if (map.containsKey("errors")) return "Validation error: " + map.get("errors").toString();
+                    return "Jira API error (" + e.getStatusCode() + "): Unknown field or invalid value";
+                }
+                return msgs.toString();
+            }
+            if (map.containsKey("errors")) return map.get("errors").toString();
+        } catch (Exception ex) { return e.getStatusCode().toString(); }
+        return e.getStatusText();
+    }
+
+    @Override public void deleteIssueOnJira(Issue issue, String url, String email, String token) {}
+
+    @Override
+    public void updateJiraStatus(String issueKey, String targetStatus, String jiraUrl, String adminEmail, String apiToken) {
+        if (issueKey == null || targetStatus == null) return;
+
+        try {
+            String transitionsUrl = jiraUrl.replaceAll("/$", "") + "/rest/api/3/issue/" + issueKey + "/transitions";
+            HttpHeaders headers = createAuthHeaders(adminEmail, apiToken);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(transitionsUrl, HttpMethod.GET, entity, Map.class);
+            if (response.getBody() == null) return;
+
+            List<Map<String, Object>> transitions = (List<Map<String, Object>>) response.getBody().get("transitions");
+            if (transitions == null || transitions.isEmpty()) {
+                logger.warn("Issue {} không có transitions nào khả dụng", issueKey);
                 return;
             }
-            logger.error("Lỗi HTTP từ Jira API xóa Issue: {}", e.getStatusCode());
-            String errorMessage = extractErrorMessage(e.getResponseBodyAsString());
-            issue.setSyncStatus(SyncStatus.ERROR);
-            issueDao.save(issue);
-            throw new RuntimeException("Lỗi xóa Issue trên Jira: " + errorMessage);
-        } catch (RestClientException e) {
-            logger.error("Lỗi khi gọi Jira API xóa Issue: {}", e.getMessage());
-            issue.setSyncStatus(SyncStatus.ERROR);
-            issueDao.save(issue);
-            throw new RuntimeException("Lỗi xóa Issue trên Jira: " + e.getMessage());
-        }
-    }
 
-    // ==================== Private Helper Methods ====================
+            for (Map<String, Object> transition : transitions) {
+                Map<String, Object> to = (Map<String, Object>) transition.get("to");
+                if (to != null) {
+                    String toName = (String) to.get("name");
+                    if (toName != null && toName.equalsIgnoreCase(targetStatus)) {
+                        String transitionId = (String) transition.get("id");
+                        if (transitionId == null) continue;
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> buildCreateIssueRequest(Issue issue, String projectKey) {
-        Map<String, Object> fields = new HashMap<>();
+                        // Bước 3: Thực hiện transition
+                        Map<String, Object> transitionBody = Map.of("transition", Map.of("id", transitionId));
+                        HttpEntity<Map<String, Object>> transitionEntity = new HttpEntity<>(transitionBody, headers);
 
-        // ======== Project (bắt buộc) ========
-        Map<String, Object> project = new HashMap<>();
-        project.put("key", projectKey);
-        fields.put("project", project);
-
-        // ======== Summary / Title (bắt buộc) ========
-        fields.put("summary", issue.getTitle());
-
-        // ======== Description - Chuyển sang Atlassian Document Format (ADF) ========
-        String description = issue.getDescription() != null ? issue.getDescription() : "";
-        fields.put("description", convertToADF(description));
-
-        // ======== Issue Type (bắt buộc) ========
-        Map<String, Object> issueType = new HashMap<>();
-        issueType.put("name", mapIssueTypeToJira(issue));
-        fields.put("issuetype", issueType);
-
-        // ======== Deadline (tuỳ chọn) ========
-        if (issue.getDeadline() != null) {
-            fields.put("duedate", issue.getDeadline().toLocalDate().toString());
-        }
-
-        // ======== Assignee - Dùng accountId (tuỳ chọn) ========
-        if (issue.getAssignedTo() != null) {
-            String jiraAccountId = issue.getAssignedTo().getStudent().getJiraAccountId();
-            if (jiraAccountId != null && !jiraAccountId.isEmpty()) {
-                Map<String, Object> assignee = new HashMap<>();
-                assignee.put("accountId", jiraAccountId);
-                fields.put("assignee", assignee);
-            }
-        }
-
-        // ======== Parent Issue - Cho SUB_TASK ========
-        if (issue.getIssueType() == IssueType.SUB_TASK && issue.getParent() != null) {
-            String parentKey = issue.getParent().getIssueCode();
-            if (parentKey != null && !parentKey.isEmpty()) {
-                Map<String, Object> parent = new HashMap<>();
-                parent.put("key", parentKey);
-                fields.put("parent", parent);
-            }
-        }
-
-        // ======== Xây dựng request object cuối cùng ========
-        Map<String, Object> request = new HashMap<>();
-        request.put("fields", fields);
-        return request;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> buildUpdateIssueRequest(Issue issue) {
-        Map<String, Object> fields = new HashMap<>();
-
-        // ======== Summary / Title ========
-        fields.put("summary", issue.getTitle());
-
-        // ======== Description - Chuyển sang Atlassian Document Format (ADF) ========
-        String description = issue.getDescription() != null ? issue.getDescription() : "";
-        fields.put("description", convertToADF(description));
-
-        // ======== Deadline (tuỳ chọn) ========
-        if (issue.getDeadline() != null) {
-            fields.put("duedate", issue.getDeadline().toLocalDate().toString());
-        }
-
-        // ======== Assignee - Dùng accountId (tuỳ chọn) ========
-        if (issue.getAssignedTo() != null) {
-            String jiraAccountId = issue.getAssignedTo().getStudent().getJiraAccountId();
-            if (jiraAccountId != null && !jiraAccountId.isEmpty()) {
-                Map<String, Object> assignee = new HashMap<>();
-                assignee.put("accountId", jiraAccountId);
-                fields.put("assignee", assignee);
-            }
-        } else {
-            // Nếu assignedTo là null, clear assignee trên Jira
-            fields.put("assignee", null);
-        }
-
-        Map<String, Object> request = new HashMap<>();
-        request.put("fields", fields);
-        return request;
-    }
-
-    private String mapIssueTypeToJira(Issue issue) {
-        switch (issue.getIssueType()) {
-            case EPIC:
-                return "Epic";
-            case STORY:
-                return "Story";
-            case BUG:
-                return "Bug";
-            case SUB_TASK:
-                return "Sub-task";
-            case TASK:
-            default:
-                return "Task";
-        }
-    }
-
-    /**
-     * Chuyển đổi plain text description sang Atlassian Document Format (ADF)
-     *
-     * ADF chuẩn cho mô tả:
-     * {
-     *   "type": "doc",
-     *   "version": 1,
-     *   "content": [
-     *     {
-     *       "type": "paragraph",
-     *       "content": [
-     *         {
-     *           "type": "text",
-     *           "text": "Nội dung mô tả"
-     *         }
-     *       ]
-     *     }
-     *   ]
-     * }
-     */
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> convertToADF(String plainText) {
-        Map<String, Object> adf = new HashMap<>();
-        adf.put("type", "doc");
-        adf.put("version", 1);
-
-        // Xây dựng content array
-        List<Map<String, Object>> contentList = new ArrayList<>();
-
-        // Tách text theo dòng (newline) để tạo từng paragraph
-        String[] lines = plainText.isEmpty() ? new String[]{""} : plainText.split("\n");
-
-        for (String line : lines) {
-            Map<String, Object> paragraph = new HashMap<>();
-            paragraph.put("type", "paragraph");
-
-            // Content bên trong paragraph
-            List<Map<String, Object>> textContent = new ArrayList<>();
-            Map<String, Object> textObj = new HashMap<>();
-            textObj.put("type", "text");
-            textObj.put("text", line.isEmpty() ? " " : line); // Nếu dòng trống, thêm space
-            textContent.add(textObj);
-
-            paragraph.put("content", textContent);
-            contentList.add(paragraph);
-        }
-
-        // Nếu không có nội dung, thêm paragraph trống
-        if (contentList.isEmpty()) {
-            Map<String, Object> emptyParagraph = new HashMap<>();
-            emptyParagraph.put("type", "paragraph");
-            List<Map<String, Object>> emptyContent = new ArrayList<>();
-            Map<String, Object> emptyText = new HashMap<>();
-            emptyText.put("type", "text");
-            emptyText.put("text", "");
-            emptyContent.add(emptyText);
-            emptyParagraph.put("content", emptyContent);
-            contentList.add(emptyParagraph);
-        }
-
-        adf.put("content", contentList);
-        return adf;
-    }
-
-    /**
-     * Trích xuất thông báo lỗi từ Jira API response
-     * Jira API trả về error trong format: { "errorMessages": ["..."], "errors": {...} }
-     */
-    private String extractErrorMessage(String responseBody) {
-        try {
-            Map<String, Object> errorResponse = objectMapper.readValue(responseBody, Map.class);
-
-            // Kiểm tra errorMessages array
-            if (errorResponse.containsKey("errorMessages")) {
-                List<String> errorMessages = (List<String>) errorResponse.get("errorMessages");
-                if (!errorMessages.isEmpty()) {
-                    return errorMessages.get(0);
-                }
-            }
-
-            // Kiểm tra errors object
-            if (errorResponse.containsKey("errors")) {
-                Map<String, Object> errors = (Map<String, Object>) errorResponse.get("errors");
-                if (!errors.isEmpty()) {
-                    return errors.values().iterator().next().toString();
-                }
-            }
-
-            // Mặc định trả về toString
-            return errorResponse.toString();
-        } catch (Exception e) {
-            return responseBody;
-        }
-    }
-
-    /**
-     * Cập nhật status của Issue trên Jira Cloud
-     *
-     * Jira Cloud không cho phép cập nhật trực tiếp field status.
-     * Phải thực hiện qua 2 bước:
-     * 1. Lấy Transition ID từ GET /rest/api/3/issue/{issueCode}/transitions
-     * 2. Thực hiện transition: POST /rest/api/3/issue/{issueCode}/transitions
-     */
-    public void updateJiraStatus(
-            String issueCode,
-            String targetStatusName,
-            String jiraUrl,
-            String jiraAdminEmail,
-            String jiraApiToken
-    ) {
-        try {
-            String baseUrl = jiraUrl.replaceAll("/$", "");
-
-            // ========== Step 1: Lấy danh sách transitions ==========
-            String transitionsUrl = baseUrl + "/rest/api/3/issue/" + issueCode + "/transitions";
-            HttpHeaders headers = createAuthHeaders(jiraAdminEmail, jiraApiToken);
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-            logger.info("Lấy transitions cho Issue: {}", issueCode);
-            ResponseEntity<Map<String, Object>> transitionsResponse = restTemplate.exchange(
-                    transitionsUrl,
-                    HttpMethod.GET,
-                    entity,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
-
-            if (!transitionsResponse.getStatusCode().is2xxSuccessful() || transitionsResponse.getBody() == null) {
-                throw new RuntimeException("Lỗi lấy transitions từ Jira");
-            }
-
-            // ========== Step 2: Tìm Transition ID khớp với targetStatusName ==========
-            Map<String, Object> transitionsData = transitionsResponse.getBody();
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> transitions = (List<Map<String, Object>>) transitionsData.get("transitions");
-
-            String transitionId = null;
-            if (transitions != null) {
-                for (Map<String, Object> transition : transitions) {
-                    Map<String, Object> toStatus = (Map<String, Object>) transition.get("to");
-                    if (toStatus != null && targetStatusName.equalsIgnoreCase((String) toStatus.get("name"))) {
-                        transitionId = (String) transition.get("id");
-                        break;
+                        restTemplate.exchange(transitionsUrl, HttpMethod.POST, transitionEntity, Void.class);
+                        logger.info("✓ Đã chuyển trạng thái {} -> {} trên Jira", issueKey, targetStatus);
+                        return;
                     }
                 }
             }
 
-            if (transitionId == null) {
-                throw new RuntimeException("Không tìm thấy transition đến trạng thái: " + targetStatusName);
-            }
-
-            logger.info("✓ Tìm được transition ID: {} cho status: {}", transitionId, targetStatusName);
-
-            // ========== Step 3: Thực hiện transition ==========
-            String doTransitionUrl = baseUrl + "/rest/api/3/issue/" + issueCode + "/transitions";
-
-            Map<String, Object> transitionPayload = new HashMap<>();
-            Map<String, String> transitionData = new HashMap<>();
-            transitionData.put("id", transitionId);
-            transitionPayload.put("transition", transitionData);
-
-            HttpEntity<Map<String, Object>> doTransitionEntity = new HttpEntity<>(transitionPayload, headers);
-
-            logger.info("Thực hiện transition trên Jira: {} -> {}", issueCode, targetStatusName);
-            ResponseEntity<Void> doTransitionResponse = restTemplate.exchange(
-                    doTransitionUrl,
-                    HttpMethod.POST,
-                    doTransitionEntity,
-                    Void.class
-            );
-
-            if (doTransitionResponse.getStatusCode().is2xxSuccessful()) {
-                logger.info("✓ Cập nhật status thành công trên Jira: {} -> {}", issueCode, targetStatusName);
-            } else {
-                throw new RuntimeException("Jira trả về lỗi: " + doTransitionResponse.getStatusCode().value());
-            }
-
-        } catch (HttpClientErrorException e) {
-            logger.error("Lỗi HTTP từ Jira khi cập nhật status: {}", e.getStatusCode());
-            String errorMessage = extractErrorMessage(e.getResponseBodyAsString());
-            throw new RuntimeException("Lỗi cập nhật status trên Jira: " + errorMessage);
-        } catch (RestClientException e) {
-            logger.error("Lỗi khi gọi Jira API cập nhật status: {}", e.getMessage());
-            throw new RuntimeException("Lỗi cập nhật status trên Jira: " + e.getMessage());
+            logger.warn("Không tìm thấy transition '{}' cho issue {}", targetStatus, issueKey);
+        } catch (Exception e) {
+            logger.error("Lỗi khi cập nhật trạng thái trên Jira: {}", e.getMessage());
+            throw new RuntimeException("Lỗi cập nhật trạng thái Jira: " + e.getMessage());
         }
     }
 
-    private HttpHeaders createAuthHeaders(String adminEmail, String apiToken) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        String auth = adminEmail + ":" + apiToken;
-        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
-        headers.set("Authorization", "Basic " + encodedAuth);
-        return headers;
+    private String mapStatusToJiraName(IssueStatus status) {
+        switch (status) {
+            case DONE:         return "Done";
+            case IN_PROGRESS:  return "In Progress";
+            case TODO:         return "To Do";
+            default:           return "To Do";
+        }
     }
 }
-

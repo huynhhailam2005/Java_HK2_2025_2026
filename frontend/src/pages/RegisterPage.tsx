@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getApiErrorMessage, register } from '../services/authApi';
-// 🛠️ Import hàm hú Toast từ App
 import { showLiquidToast } from '../utils/toast.ts';
 
 const RegisterPage = () => {
@@ -50,7 +49,7 @@ const RegisterPage = () => {
 
             setTimeout(() => {
                 navigate('/');
-            }, 1500); // Đợi 1.5s cho Toast diễn xong
+            }, 1500);
 
         } catch (err) {
             const errorMsg = getApiErrorMessage(err, 'Không thể kết nối đến Backend.');

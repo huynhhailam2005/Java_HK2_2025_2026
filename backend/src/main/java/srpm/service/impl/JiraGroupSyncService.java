@@ -13,14 +13,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-import srpm.dto.response.JiraGroupDto;
-import srpm.dto.response.JiraUserDto;
+import srpm.dto.JiraGroupDto;
+import srpm.dto.JiraUserDto;
 import srpm.model.Group;
 import srpm.model.GroupMember;
 import srpm.model.GroupMemberRole;
 import srpm.model.Student;
-import srpm.repository.GroupRepository;
-import srpm.repository.StudentRepository;
+import srpm.repository.IGroupRepository;
+import srpm.repository.IStudentRepository;
 import srpm.service.IJiraGroupSyncService;
 
 import java.util.*;
@@ -29,16 +29,16 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class JiraGroupSyncService implements IJiraGroupSyncService {
 
-    private final GroupRepository groupDao;
-    private final StudentRepository studentDao;
+    private final IGroupRepository groupDao;
+    private final IStudentRepository studentDao;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
     private static final Logger logger = LoggerFactory.getLogger(JiraGroupSyncService.class);
 
     @Autowired
     public JiraGroupSyncService(
-            GroupRepository groupDao,
-            StudentRepository studentDao,
+            IGroupRepository groupDao,
+            IStudentRepository studentDao,
             RestTemplate restTemplate
     ) {
         this.groupDao = groupDao;
@@ -47,14 +47,11 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
         this.restTemplate = restTemplate;
     }
 
-    // Đồng bộ nhóm từ Jira sang hệ thống
     @Transactional
     public JiraGroupDto syncJiraGroupToLocalGroup(Long groupId, String jiraGroupName) {
-        // Lấy thông tin group từ database
         Group group = groupDao.findByIdWithStudentsAndLecturer(groupId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy group: " + groupId));
 
-        // Kiểm tra cấu hình Jira
         if (group.getJiraUrl() == null || group.getJiraUrl().isEmpty()) {
             throw new RuntimeException("Chưa cấu hình URL Jira cho group này");
         }
@@ -65,7 +62,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             throw new RuntimeException("Chưa cấu hình email admin Jira cho group này");
         }
 
-        // Lấy assignable users từ Jira Project (Jira Cloud luôn dùng cách này)
         JiraGroupDto jiraGroup = getProjectAssignableUsers(
                 group.getJiraUrl(),
                 jiraGroupName,
@@ -77,13 +73,11 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             throw new RuntimeException("Không thể lấy thông tin nhóm từ Jira");
         }
 
-        // Đồng bộ thành viên (Soft Sync - chỉ update thay đổi)
         syncGroupMembers(group, jiraGroup.getMembers() != null ? jiraGroup.getMembers() : new ArrayList<>());
 
         return jiraGroup;
     }
 
-    // Lấy danh sách users assignable cho project (Jira Cloud - luồng chính)
     private JiraGroupDto getProjectAssignableUsers(String jiraUrl, String projectKey, String adminEmail, String apiToken) {
         try {
             List<JiraUserDto> members = new ArrayList<>();
@@ -92,7 +86,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
 
             logger.info("Fetching assignable users for Jira project: " + projectKey);
 
-            // Chuẩn bị HTTP headers với Basic Auth
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             String auth = adminEmail + ":" + apiToken;
@@ -101,7 +94,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
 
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            // Gọi Jira API bằng RestTemplate
             ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                     urlString,
                     HttpMethod.GET,
@@ -112,7 +104,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 logger.info("Jira API Response Code: " + response.getStatusCode().value());
 
-                // Parse array of users
                 List<Map<String, Object>> users = response.getBody();
 
                 for (Map<String, Object> user : users) {
@@ -138,18 +129,11 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
         }
     }
 
-    /**
-     * Soft Sync - Đồng bộ thành viên nhóm (chỉ update thay đổi, không xóa sạch)
-     * - Xóa sinh viên không còn trong Jira
-     * - Thêm sinh viên mới từ Jira
-     * - Update thông tin sinh viên đã có
-     */
     @Transactional
-    protected void syncGroupMembers(Group group, List<JiraUserDto> jiraMembers) {
+    public void syncGroupMembers(Group group, List<JiraUserDto> jiraMembers) {
         Map<String, Long> jiraAccountIdToStudentId = new HashMap<>();
         List<Student> studentsToSave = new ArrayList<>();
 
-        // Xử lý tất cả active Jira users
         for (JiraUserDto jiraUser : jiraMembers) {
             if (!jiraUser.isActive()) {
                 continue;
@@ -158,7 +142,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             Optional<Student> existingByAccountId = studentDao.findByJiraAccountId(jiraUser.getAccountId());
 
             if (existingByAccountId.isPresent()) {
-                // Update sinh viên đã tồn tại
                 Student student = existingByAccountId.get();
                 boolean changed = false;
 
@@ -179,7 +162,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
                 jiraAccountIdToStudentId.put(jiraUser.getAccountId(), student.getID());
                 logger.info("Updated student from Jira: " + student.getUsername());
             } else {
-                // Tạo sinh viên mới
                 Student newStudent = new Student();
                 String email = jiraUser.getEmailAddress();
                 if (email == null || email.isEmpty()) {
@@ -199,7 +181,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             }
         }
 
-        // Batch save tất cả students (một lần thay vì trong loop)
         if (!studentsToSave.isEmpty()) {
             List<Student> savedStudents = studentDao.saveAll(studentsToSave);
             for (Student student : savedStudents) {
@@ -209,7 +190,6 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             }
         }
 
-        // Soft Sync: Remove sinh viên không còn trong Jira (thông qua GroupMember)
         Set<GroupMember> membersToRemove = new HashSet<>();
         for (GroupMember member : group.getGroupMembers()) {
             String jiraAccountId = member.getStudent().getJiraAccountId();
@@ -220,12 +200,10 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
         }
         group.getGroupMembers().removeAll(membersToRemove);
 
-        // Thêm sinh viên mới vào group thông qua GroupMember
         for (Map.Entry<String, Long> entry : jiraAccountIdToStudentId.entrySet()) {
             Long studentId = entry.getValue();
             Optional<Student> student = studentDao.findById(studentId);
             if (student.isPresent()) {
-                // Kiểm tra xem student đã có trong group không
                 boolean alreadyInGroup = group.getGroupMembers().stream()
                         .anyMatch(gm -> gm.getStudent().getID().equals(studentId));
                 if (!alreadyInGroup) {
@@ -236,19 +214,11 @@ public class JiraGroupSyncService implements IJiraGroupSyncService {
             }
         }
 
-        // Lưu group
         groupDao.save(group);
     }
 
-    // Tạo email unique cho Jira user khi email từ Jira trống
     private String generateUniqueEmail(String jiraAccountId) {
         long timestamp = System.currentTimeMillis();
         return "jira_" + jiraAccountId + "_" + timestamp + "@jira.local";
-    }
-
-    // Lấy danh sách nhóm từ Jira (deprecated - Jira Cloud không support)
-    public List<String> getJiraGroups(Long groupId) {
-        logger.warn("getJiraGroups() is deprecated for Jira Cloud. Use project key directly.");
-        return new ArrayList<>(); // Trả về empty list
     }
 }

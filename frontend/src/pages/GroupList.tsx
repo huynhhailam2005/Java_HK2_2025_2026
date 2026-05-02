@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Users, ChevronRight, LayoutGrid, Plus, X, Save, AlignLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { showLiquidToast } from '../utils/toast';
+import { adminApi } from '../services/adminApi';
 
 interface GroupItem {
     id: number;
@@ -17,46 +18,57 @@ const GroupList = () => {
     const [groups, setGroups] = useState<GroupItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    // Da them truong description theo dung yeu cau
     const [newGroup, setNewGroup] = useState({ code: '', name: '', description: '' });
     const navigate = useNavigate();
 
     const userDataStr = localStorage.getItem('user');
-    const currentUser = userDataStr ? JSON.parse(userDataStr) : { username: '', role: 'STUDENT' };
+    const currentUser = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: '', role: 'STUDENT' };
     const userRole = currentUser.role;
 
     useEffect(() => {
-        setLoading(true);
-        setTimeout(() => {
-            if (userRole === 'LECTURER') {
-                setGroups([
-                    { id: 1, code: 'GR-01', name: 'Hệ thống Quản lý KTX', role: 'LECTURER', memberCount: 4 },
-                    { id: 2, code: 'GR-02', name: 'Website Bán Hàng Điện Tử', role: 'LECTURER', memberCount: 4 },
-                ]);
-            } else {
-                // Mock cho Student
-                setGroups([
-                    { id: 1, code: 'GR-01', name: 'Hệ thống Quản lý KTX', role: 'LEADER', lecturerName: 'gv_nguyenvana', memberCount: 4 },
-                    { id: 3, code: 'GR-03', name: 'App Quản Lý Thư Viện', role: 'MEMBER', lecturerName: 'gv_tranthib', memberCount: 4 },
-                ]);
-            }
-            setLoading(false);
-        }, 500);
+        loadGroups();
     }, [userRole]);
 
-    const handleCreateGroup = () => {
+    const loadGroups = async () => {
+        setLoading(true);
+        try {
+            const response = await adminApi.getGroups();
+            if (response.data.success) {
+                const allGroups = response.data.data || [];
+                const formattedGroups: GroupItem[] = allGroups.map((g: any) => ({
+                    id: g.groupId || g.id,
+                    code: g.groupCode || g.code || '',
+                    name: g.groupName || g.name || '',
+                    role: (userRole === 'LECTURER' ? 'LECTURER' : 'MEMBER') as GroupItem['role'],
+                    lecturerName: g.lecturerUsername || g.lecturerName,
+                    memberCount: g.memberCount || 0
+                }));
+                setGroups(formattedGroups);
+            }
+        } catch (error) {
+            console.error('Error loading groups:', error);
+            showLiquidToast('Không thể tải danh sách nhóm', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateGroup = async () => {
         if (!newGroup.code || !newGroup.name) return showLiquidToast('Vui lòng nhập đủ thông tin mã và tên nhóm', 'error');
-        const created: GroupItem = {
-            id: Date.now(),
-            code: newGroup.code,
-            name: newGroup.name,
-            role: 'LECTURER',
-            memberCount: 0 // Nhom moi tao chua co sinh vien
-        };
-        setGroups([created, ...groups]);
-        setIsCreateModalOpen(false);
-        setNewGroup({ code: '', name: '', description: '' });
-        showLiquidToast('Đã tạo nhóm thành công. Hãy vào nhóm để thêm sinh viên!', 'success');
+        try {
+            await adminApi.createGroup({
+                groupCode: newGroup.code,
+                groupName: newGroup.name,
+                lecturerId: currentUser.id
+            });
+            showLiquidToast('Đã tạo nhóm thành công!', 'success');
+            setIsCreateModalOpen(false);
+            setNewGroup({ code: '', name: '', description: '' });
+            loadGroups();
+        } catch (error: any) {
+            const msg = error.response?.data?.message || 'Lỗi khi tạo nhóm';
+            showLiquidToast(msg, 'error');
+        }
     };
 
     return (

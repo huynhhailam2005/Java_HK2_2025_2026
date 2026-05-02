@@ -18,7 +18,6 @@ public class LecturerDao {
   }
 
   public Optional<Lecturer> findByUserId(Long userId) {
-    // Lecturer PK = user_id
     return findById(userId);
   }
 

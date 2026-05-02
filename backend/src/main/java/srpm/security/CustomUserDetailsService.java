@@ -7,16 +7,16 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import srpm.model.User;
-import srpm.repository.UserRepository;
+import srpm.repository.IUserRepository;
 
 import java.util.List;
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UserRepository userDao;
+    private final IUserRepository userDao;
 
-    public CustomUserDetailsService(UserRepository userDao) {
+    public CustomUserDetailsService(IUserRepository userDao) {
         this.userDao = userDao;
     }
 

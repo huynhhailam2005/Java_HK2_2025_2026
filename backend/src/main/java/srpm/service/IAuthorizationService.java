@@ -10,10 +10,6 @@ public interface IAuthorizationService {
 
     boolean canAccessGroup(Long groupId);
 
-    boolean isTeamLeaderOfGroup(Long groupId);
-
     void requireAuthentication();
-
-    void requireRole(String role);
 }
 

@@ -2,33 +2,37 @@ package srpm.service;
 
 import srpm.dto.request.GroupRequest;
 import srpm.dto.request.UpdateGroupRequest;
-import srpm.model.Group;
+import srpm.dto.GroupDto;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface IGroupService {
 
-    List<Group> getAllGroups();
+    List<GroupDto> getAllGroups();
 
-    Optional<Group> getGroupById(Long id);
+    Optional<GroupDto> getGroupById(Long id);
 
-    Group createGroup(GroupRequest req);
+    GroupDto createGroup(GroupRequest req);
 
-    Optional<Group> updateGroupName(Long id, String newName);
+    Optional<GroupDto> updateGroupName(Long id, String newName);
 
-    Optional<Group> updateGroupLecturer(Long id, Long lecturerId);
+    Optional<GroupDto> updateGroupLecturer(Long id, Long lecturerId);
 
-    Optional<Group> updateGroupInfo(Long id, UpdateGroupRequest request);
+    Optional<GroupDto> updateGroupInfo(Long id, UpdateGroupRequest request);
 
     boolean deleteGroup(Long id);
 
-    Group addStudent(Long groupId, Long studentId);
+    GroupDto addStudent(Long groupId, Long studentId);
 
     boolean removeStudent(Long groupId, Long studentId);
 
-    List<Group> getGroupsByLecturer(Long lecturerId);
+    boolean removeMember(Long groupId, Long memberId);
 
-    List<Group> getGroupsByStudent(Long studentId);
+    List<GroupDto> getGroupsByLecturer(Long lecturerId);
+
+    List<GroupDto> getGroupsByStudent(Long studentId);
 }
+
+
 

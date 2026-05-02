@@ -1,13 +1,14 @@
 package srpm.service;
 
-import srpm.dto.response.JiraGroupDto;
+import srpm.dto.JiraGroupDto;
+import srpm.dto.JiraUserDto;
+import srpm.model.Group;
 
 import java.util.List;
 
 public interface IJiraGroupSyncService {
-
     JiraGroupDto syncJiraGroupToLocalGroup(Long groupId, String jiraGroupName);
 
-    List<String> getJiraGroups(Long groupId);
+    void syncGroupMembers(Group group, List<JiraUserDto> jiraMembers);
 }
 

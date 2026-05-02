@@ -10,8 +10,7 @@ import java.util.Optional;
 
 @Repository
 public class GroupDao {
-
-  @PersistenceContext
+   @PersistenceContext
   private EntityManager entityManager;
 
   public Optional<Group> findById(Long id) {

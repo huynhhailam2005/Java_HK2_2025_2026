@@ -13,6 +13,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import LecturerDashboard from './pages/LecturerDashboard';
 import GroupList from './pages/GroupList';
 import GroupWorkspace from './pages/GroupWorkspace';
+import ProgressReport from './pages/ProgressReport';
 
 function App() {
     const [toastInfo, setToastInfo] = useState<ToastDetail | null>(null);
@@ -60,6 +61,9 @@ function App() {
                     {/* Tuyến chung cho SV & GV */}
                     <Route path="/groups" element={<GroupList />} />
                     <Route path="/groups/:groupId" element={<GroupWorkspace />} />
+
+                    {/* Báo cáo tiến độ */}
+                    <Route path="/groups/:groupId/report" element={<ProgressReport />} />
 
                     {/* Tuyến Sinh Viên */}
                     <Route path="/dashboard/student" element={<StudentDashboard />} />
